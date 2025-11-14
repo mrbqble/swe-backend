@@ -1,0 +1,69 @@
+[tool.poetry]
+name = "scp_api"
+version = "0.1.0"
+description = "Supplier-Consumer Platform FastAPI backend"
+authors = ["CSCI 361 Team"]
+readme = "README.md"
+packages = [{ include = "app" }]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "^0.115.3"
+uvicorn = { version = "^0.30.6", extras = ["standard"] }
+sqlalchemy = "^2.0.36"
+asyncpg = "^0.29.0"
+alembic = "^1.14.0"
+pydantic = "^2.9.2"
+pydantic-settings = "^2.5.2"
+passlib = { version = "^1.7.4", extras = ["bcrypt"] }
+pyjwt = { version = "^2.9.0", extras = ["crypto"] }
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.2"
+pytest-asyncio = "^0.24.0"
+httpx = "^0.27.2"
+black = "^24.10.0"
+ruff = "^0.6.9"
+isort = "^5.13.2"
+mypy = "^1.11.2"
+pre-commit = "^4.0.1"
+types-passlib = "^1.7.7.20241019"
+types-pyjwt = "^2.9.0.20241022"
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.isort]
+profile = "black"
+line_length = 100
+combine_as_imports = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+select = ["E", "F", "I", "B", "UP", "N", "ASYNC"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.mypy]
+python_version = "3.11"
+plugins = []
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = false
+strict_optional = true
+check_untyped_defs = true
+no_implicit_optional = true
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+addopts = "--strict-markers --strict-config"
+asyncio_mode = "auto"
+pythonpath = ["app"]
+
+[build-system]
+requires = ["poetry-core>=1.8.0"]
+build-backend = "poetry.core.masonry.api"

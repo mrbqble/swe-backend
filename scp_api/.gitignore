@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.idea/
+.vscode/
+.env
+.mypy_cache/
+.pytest_cache/
+.poetry/
+.poetry-cache/
+poetry.lock
+alembic/versions/*.pyc
