@@ -1,0 +1,11 @@
+fastapi==0.116.2
+uvicorn[standard]==0.30.6
+sqlalchemy==2.0.36
+asyncpg==0.30.0
+alembic==1.17.1
+pydantic==2.9.2
+pydantic-settings==2.5.2
+passlib[bcrypt]==1.7.4
+pyjwt[crypto]==2.9.0
+python-dotenv==1.0.1
+watchfiles==0.24.0
