@@ -29,6 +29,7 @@ def event_loop() -> AsyncIterator[asyncio.AbstractEventLoop]:
 async def session_factory() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
     engine = create_async_engine(TEST_DB_URL, future=True)
     async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     yield factory
