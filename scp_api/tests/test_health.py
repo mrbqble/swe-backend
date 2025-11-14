@@ -7,5 +7,5 @@ async def test_health_endpoint(async_client):
     assert response.status_code == 200
     payload = response.json()
     assert payload["status"] == "ok"
-    assert "env" in payload
-    assert "version" in payload
+    assert payload["env"] == "test"
+    assert payload["db"] == "ok"

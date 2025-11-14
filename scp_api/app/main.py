@@ -1,10 +1,15 @@
 from __future__ import annotations
 
-from fastapi import FastAPI, Request, status
+from collections.abc import Mapping
+
+from fastapi import Depends, FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_db
 from app.api.routers import (
     auth,
     chats,
@@ -66,12 +71,18 @@ def register_routes(app: FastAPI) -> None:
 
 
 def register_health_route(app: FastAPI) -> None:
-    @app.get("/health", tags=["Health"], response_model=dict[str, str])
-    async def health_check() -> dict[str, str]:
+    @app.get("/health", tags=["Health"])
+    async def health_check(session: AsyncSession = Depends(get_db)) -> Mapping[str, str]:
+        db_status = "ok"
+        try:
+            await session.execute(text("SELECT 1"))
+        except Exception:  # pragma: no cover
+            db_status = "error"
         return {
             "status": "ok",
             "env": settings.environment,
             "version": settings.version,
+            "db": db_status,
         }
 
 
