@@ -1,8 +1,8 @@
 from fastapi import APIRouter
 
-router = APIRouter(prefix="/suppliers", tags=["suppliers"])
+router = APIRouter(prefix="/suppliers", tags=["Suppliers"])
 
 
-@router.get("", summary="Placeholder endpoint")
+@router.get("", summary="Placeholder")
 async def read_suppliers_placeholder() -> dict[str, str]:
-    return {"detail": "suppliers endpoint pending implementation"}
+    return {"detail": "Suppliers endpoint pending implementation"}
