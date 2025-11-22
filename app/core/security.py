@@ -44,6 +44,14 @@ def create_access_token(
                 existing_scopes = set(to_encode.get("scopes", []))
                 to_encode["scopes"] = list(existing_scopes | set(role_scopes))
 
+    # Ensure subject is a string to satisfy jwt library validation
+    if "sub" in to_encode and to_encode["sub"] is not None:
+        try:
+            to_encode["sub"] = str(to_encode["sub"])
+        except Exception:
+            # fallback: remove malformed subject to avoid decode errors
+            to_encode.pop("sub", None)
+
     return jwt.encode(to_encode, str(settings.SECRET_KEY), algorithm=settings.ALGORITHM)
 
 
@@ -124,11 +132,20 @@ def verify_token_scope(payload: dict[str, Any], required_scope: str) -> bool:
 def decode_access_token(token: str) -> Any:
     """Decode a JWT access token."""
     try:
-        return jwt.decode(
-            token, str(settings.SECRET_KEY), algorithms=[settings.ALGORITHM]
-        )
+        payload = jwt.decode(token, str(settings.SECRET_KEY), algorithms=[settings.ALGORITHM])
+        # If subject was stored as a string, convert numeric subject back to int
+        sub = payload.get("sub")
+        if isinstance(sub, str) and sub.isdigit():
+            try:
+                payload["sub"] = int(sub)
+            except Exception:
+                # leave as-is if conversion fails
+                pass
+        return payload
     except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
         return None
+
+
 
 
 def create_refresh_token(
@@ -136,6 +153,12 @@ def create_refresh_token(
 ) -> str:
     """Create a JWT refresh token."""
     to_encode = data.copy()
+    # Ensure subject is a string in refresh token as well
+    if "sub" in to_encode and to_encode["sub"] is not None:
+        try:
+            to_encode["sub"] = str(to_encode["sub"])
+        except Exception:
+            to_encode.pop("sub", None)
     expire = datetime.now(UTC) + (
         expires_delta or timedelta(minutes=settings.REFRESH_TOKEN_EXPIRE_MINUTES)
     )
@@ -149,6 +172,13 @@ def decode_refresh_token(token: str) -> Any:
         payload = jwt.decode(
             token, str(settings.SECRET_KEY), algorithms=[settings.ALGORITHM]
         )
+        # normalize subject type if present
+        sub = payload.get("sub")
+        if isinstance(sub, str) and sub.isdigit():
+            try:
+                payload["sub"] = int(sub)
+            except Exception:
+                pass
         if payload.get("type") != "refresh":
             return None
         return payload
