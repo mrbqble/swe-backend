@@ -17,7 +17,7 @@
 
 # Phony targets (targets that don't create files)
 .PHONY: help install install-dev dev start lint lint-fix format type-check check clean \
-	migrate revision upgrade downgrade seed \
+	migrate revision upgrade downgrade \
 	docker-build docker-up docker-down docker-logs docker-shell docker-restart docker-clean \
 	setup-env pre-commit-run pre-commit-update
 
@@ -40,7 +40,7 @@ help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E '(lint|format|type-check|check|pre-commit)' | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 	@echo "🗄️  Database:"
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E '(migrate|revision|upgrade|downgrade|seed)' | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E '(migrate|revision|upgrade|downgrade)' | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 	@echo "🐳 Docker:"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E 'docker' | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -180,10 +180,6 @@ current-revision: ## Show current database revision
 	@echo "📍 Current database revision:"
 	alembic current
 
-seed: ## Seed database with initial data
-	@echo "🌱 Seeding database with initial data..."
-	@python scripts/seed.py
-	@echo "✅ Database seeded successfully!"
 
 # ==============================================================================
 # Docker Commands

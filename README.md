@@ -98,10 +98,7 @@ make setup-env
 # 3. Run database migrations
 make upgrade
 
-# 4. Seed database with sample data
-make seed
-
-# 5. Start development server
+# 4. Start development server
 make dev
 ```
 
@@ -145,8 +142,6 @@ cp env.example .env
 # Run migrations
 python -m alembic upgrade head
 
-# Seed database with sample data
-python scripts/seed.py
 ```
 
 #### 4. Start Server
@@ -160,23 +155,6 @@ python -m uvicorn app.main:app --reload
 **API Docs:** http://localhost:8000/docs
 **ReDoc:** http://localhost:8000/redoc
 
-### 🔑 Sample Credentials (After Seeding)
-
-After running `make seed` or `python scripts/seed.py`, you can log in with:
-
-- **Supplier Owner:** `supplier.owner@example.com` / `Password123`
-- **Supplier Manager:** `supplier.manager@example.com` / `Password123`
-- **Supplier Sales:** `supplier.sales@example.com` / `Password123`
-- **Consumer:** `consumer@example.com` / `Password123`
-
-### 📝 Seed Data Includes
-
-- ✅ 1 Supplier: "Acme Wholesale Supplies"
-- ✅ 3 Supplier Staff: Owner, Manager, Sales Rep
-- ✅ 1 Consumer: "Retail Store Chain"
-- ✅ 3 Products: Premium, Standard, and Economy widgets
-- ✅ 1 Accepted Link: Consumer ↔ Supplier
-- ✅ 1 Sample Order: Pending order with 2 items (total: 175,000 KZT)
 
 ## 🐳 Docker
 
@@ -237,12 +215,6 @@ docker compose exec app alembic upgrade head
 docker compose exec app alembic revision --autogenerate -m "description"
 ```
 
-### Seeding Database
-
-```bash
-# Seed database with sample data
-docker compose exec app python scripts/seed.py
-```
 
 ## 📚 API Endpoints
 
@@ -320,7 +292,6 @@ make lint              # Run linter
 make format            # Format code
 make type-check        # Run type checker
 make check             # Run all checks (lint, format, type-check)
-make seed              # Seed database with sample data
 make upgrade           # Apply database migrations
 make migrate MESSAGE="description"  # Create new migration
 make clean             # Clean cache and build files
@@ -354,10 +325,6 @@ make upgrade
 # Rollback migration
 python -m alembic downgrade -1
 
-# Seed database
-python scripts/seed.py
-# Or using Make:
-make seed
 ```
 
 ## 📁 Project Structure
@@ -392,7 +359,6 @@ swe-backend/
 │   └── utils/                # Utility functions
 ├── alembic/                  # Database migrations
 ├── scripts/                  # Utility scripts
-│   └── seed.py              # Database seeding script
 ├── docs/                     # Documentation
 └── requirements.txt          # Python dependencies
 ```
@@ -488,7 +454,6 @@ The system includes 12 core domain models:
 - ✅ Phase 10: Complaints
 - ✅ Phase 11: Notifications
 - ✅ Phase 12: Cross-Cutting Quality (Validation, Security, Performance, Error Handling, Docs)
-- ✅ Phase 13: Seed Data & Developer Experience
 - ✅ Phase 14: Containerization & Local Orchestration
 - ✅ Phase 16: Observability & Ops
 - ✅ Phase 17: Security Hardening

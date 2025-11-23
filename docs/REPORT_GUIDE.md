@@ -99,27 +99,23 @@ The demo script covers:
 
 **For Report**: Include the demo script output or screenshots of the demo execution.
 
-### 5. Seed Data Verification
+### 5. User Account Setup
 
-Verify seed data matches demo requirements:
+Create user accounts for demo purposes using the signup endpoint:
 
 ```bash
-# Seed the database
-python scripts/seed.py
-
-# Verify seeded users can log in
-curl -X POST http://localhost:8000/api/v1/auth/login \
+# Create consumer account
+curl -X POST http://localhost:8000/api/v1/auth/signup \
   -H "Content-Type: application/json" \
-  -d '{"email": "consumer@example.com", "password": "Password123"}'
+  -d '{"email": "consumer@example.com", "password": "Password123", "role": "consumer"}'
+
+# Create supplier owner account
+curl -X POST http://localhost:8000/api/v1/auth/signup \
+  -H "Content-Type: application/json" \
+  -d '{"email": "supplier.owner@example.com", "password": "Password123", "role": "supplier_owner"}'
 ```
 
-**Seeded Accounts**:
-- `consumer@example.com` / `Password123` (Consumer)
-- `supplier.owner@example.com` / `Password123` (Supplier Owner)
-- `supplier.manager@example.com` / `Password123` (Supplier Manager)
-- `supplier.sales@example.com` / `Password123` (Supplier Sales)
-
-**For Report**: Document the seeded accounts and their purposes.
+**For Report**: Document the demo accounts created and their purposes.
 
 ## 📝 Report Sections
 
@@ -222,7 +218,6 @@ Before submission, verify:
 - [ ] Swagger screenshots taken
 - [ ] Module documentation complete
 - [ ] Demo script verified
-- [ ] Seed data verified
 - [ ] Submission guide reviewed
 - [ ] All documentation files included
 - [ ] Code quality checks pass (`make check`)
@@ -235,7 +230,6 @@ Instructors can quickly get started by following `docs/SUBMISSION_GUIDE.md`:
 2. Install dependencies
 3. Set up database
 4. Run migrations
-5. Seed database
 6. Start server
 7. Access `/docs` for Swagger UI
 8. Run demo script

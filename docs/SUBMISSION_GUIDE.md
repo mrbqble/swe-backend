@@ -31,8 +31,6 @@ cp env.example .env
 # 5. Run migrations
 alembic upgrade head
 
-# 6. Seed database
-python scripts/seed.py
 
 # 7. Start the server
 uvicorn app.main:app --reload
@@ -51,8 +49,6 @@ docker compose up -d
 # 3. Wait for services to be healthy (check logs)
 docker compose logs -f
 
-# 4. Seed database (in container)
-docker compose exec app python scripts/seed.py
 ```
 
 ## ✅ Verification Steps
@@ -82,7 +78,7 @@ Open in browser:
 ### 3. Verify Authentication
 
 ```bash
-# Login with seeded consumer
+# Login with consumer account
 curl -X POST http://localhost:8000/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{
@@ -100,9 +96,9 @@ curl -X POST http://localhost:8000/api/v1/auth/login \
 }
 ```
 
-## 📋 Seeded Data
+## 📋 Sample Accounts
 
-After running `python scripts/seed.py`, the following sample accounts are available:
+You can create accounts using the signup endpoint:
 
 ### Users
 
@@ -139,7 +135,7 @@ make demo
 
 **Note**: The demo script requires:
 - API running on http://localhost:8000
-- Database seeded
+- User accounts created (via signup endpoint)
 - `jq` installed for JSON parsing (optional, for pretty output)
 
 ### Manual Demo Flow
@@ -296,7 +292,6 @@ swe-backend/
 │   ├── SECURITY.md
 │   └── postman_collection.json
 ├── scripts/            # Utility scripts
-│   ├── seed.py         # Database seeding
 │   ├── demo.sh         # Demo script
 │   └── export_openapi.py
 ├── requirements.txt    # Dependencies
@@ -374,8 +369,8 @@ The API meets all acceptance criteria if:
 
 - [x] API starts successfully
 - [x] Health check returns `{"status": "ok", "db": "ok"}`
-- [x] Database can be seeded with `python scripts/seed.py`
-- [x] All seeded users can log in
+- [x] Users can be created via signup endpoint
+- [x] Users can log in
 - [x] Consumer flow works: login → view catalog → place order
 - [x] Supplier flow works: login → manage products → manage orders
 - [x] OpenAPI docs accessible at `/docs`
