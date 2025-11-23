@@ -4,9 +4,9 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.modules.consumer.schema import ConsumerResponse
 from app.modules.link.model import LinkStatus
 from app.modules.supplier.schema import SupplierResponse
-from app.modules.consumer.schema import ConsumerResponse
 
 
 class LinkRequestCreate(BaseModel):
@@ -28,7 +28,7 @@ class LinkStatusUpdate(BaseModel):
     """Schema for updating link status."""
 
     model_config = ConfigDict(
-        strict=True,
+        strict=False,  # Allow string values for enum when deserializing from JSON
         json_schema_extra={
             "example": {
                 "status": "accepted",

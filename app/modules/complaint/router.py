@@ -13,6 +13,7 @@ from app.db.session import get_db
 from app.modules.complaint.model import Complaint, ComplaintStatus
 from app.modules.complaint.schema import (
     ComplaintCreate,
+    ComplaintFeedbackUpdate,
     ComplaintResponse,
     ComplaintStatusUpdate,
 )
@@ -26,13 +27,19 @@ ComplaintRouter = APIRouter(prefix="/complaints", tags=["complaints"])
 
 
 def _validate_status_transition(
-    current_status: ComplaintStatus, new_status: ComplaintStatus
+    current_status: ComplaintStatus,
+    new_status: ComplaintStatus,
+    allow_reopen: bool = False,
 ) -> None:
     """Validate state machine transitions for complaint status."""
     valid_transitions = {
         ComplaintStatus.OPEN: {ComplaintStatus.ESCALATED, ComplaintStatus.RESOLVED},
         ComplaintStatus.ESCALATED: {ComplaintStatus.RESOLVED},
-        ComplaintStatus.RESOLVED: set[Any](),  # Resolved complaints cannot be changed
+        ComplaintStatus.RESOLVED: {ComplaintStatus.OPEN}
+        if allow_reopen
+        else set[
+            Any
+        ](),  # Resolved complaints can be reopened by consumer if not satisfied
     }
 
     allowed = valid_transitions.get(current_status, set())
@@ -323,7 +330,9 @@ async def update_complaint_status(
         )
 
     # Validate state transition
-    _validate_status_transition(complaint.status, status_update.status)
+    _validate_status_transition(
+        complaint.status, status_update.status, allow_reopen=False
+    )
 
     # If resolving, require resolution text
     if (
@@ -339,6 +348,135 @@ async def update_complaint_status(
     complaint.status = status_update.status
     if status_update.resolution:
         complaint.resolution = status_update.resolution
+    await db.commit()
+    await db.refresh(complaint)
+
+    return ComplaintResponse.model_validate(complaint)
+
+
+@ComplaintRouter.patch("/{complaint_id}/feedback", response_model=ComplaintResponse)
+async def submit_consumer_feedback(
+    complaint_id: int,
+    feedback: ComplaintFeedbackUpdate,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: AsyncSession = Depends(get_db),
+) -> ComplaintResponse:
+    """Submit consumer feedback on a resolved complaint (consumer only)."""
+    # Check user is consumer
+    if current_user.role != Role.CONSUMER.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=ErrorMessages.NOT_ENOUGH_PERMISSIONS,
+        )
+
+    # Get consumer
+    consumer = await get_consumer_by_user_id(current_user.id, db)
+    if not consumer:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Consumer profile not found",
+        )
+
+    # Get complaint
+    result = await db.execute(select(Complaint).where(Complaint.id == complaint_id))
+    complaint = result.scalar_one_or_none()
+    if not complaint:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Complaint not found",
+        )
+
+    # Check complaint belongs to consumer
+    if complaint.consumer_id != consumer.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This complaint does not belong to you",
+        )
+
+    # Check complaint is resolved
+    if complaint.status != ComplaintStatus.RESOLVED:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Feedback can only be submitted for resolved complaints",
+        )
+
+    # Check feedback hasn't been submitted already
+    if complaint.consumer_feedback is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Feedback has already been submitted for this complaint",
+        )
+
+    # Update feedback
+    complaint.consumer_feedback = feedback.satisfied
+    await db.commit()
+    await db.refresh(complaint)
+
+    return ComplaintResponse.model_validate(complaint)
+
+
+@ComplaintRouter.patch("/{complaint_id}/reopen", response_model=ComplaintResponse)
+async def reopen_complaint(
+    complaint_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: AsyncSession = Depends(get_db),
+) -> ComplaintResponse:
+    """Reopen a resolved complaint (consumer only, if not satisfied)."""
+    # Check user is consumer
+    if current_user.role != Role.CONSUMER.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=ErrorMessages.NOT_ENOUGH_PERMISSIONS,
+        )
+
+    # Get consumer
+    consumer = await get_consumer_by_user_id(current_user.id, db)
+    if not consumer:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Consumer profile not found",
+        )
+
+    # Get complaint
+    result = await db.execute(select(Complaint).where(Complaint.id == complaint_id))
+    complaint = result.scalar_one_or_none()
+    if not complaint:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Complaint not found",
+        )
+
+    # Check complaint belongs to consumer
+    if complaint.consumer_id != consumer.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This complaint does not belong to you",
+        )
+
+    # Check complaint is resolved
+    if complaint.status != ComplaintStatus.RESOLVED:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only resolved complaints can be reopened",
+        )
+
+    # Check feedback: can only reopen if feedback is False (not satisfied) or None (no feedback yet)
+    if complaint.consumer_feedback is True:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot reopen complaint: you indicated you were satisfied with the resolution",
+        )
+
+    # Validate state transition (allow reopen)
+    _validate_status_transition(
+        complaint.status, ComplaintStatus.OPEN, allow_reopen=True
+    )
+
+    # Reopen complaint
+    complaint.status = ComplaintStatus.OPEN
+    # Clear feedback if it was False, so consumer can provide feedback again after new resolution
+    if complaint.consumer_feedback is False:
+        complaint.consumer_feedback = None
     await db.commit()
     await db.refresh(complaint)
 

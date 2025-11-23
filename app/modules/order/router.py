@@ -5,12 +5,13 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import joinedload, selectinload
 
 from app.api.dependencies import get_current_user
 from app.core.constants import ErrorMessages
 from app.core.roles import Role
 from app.db.session import get_db
+from app.modules.consumer.model import Consumer
 from app.modules.link.model import Link, LinkStatus
 from app.modules.order.model import Order, OrderItem, OrderStatus
 from app.modules.order.schema import OrderCreate, OrderResponse, OrderStatusUpdate
@@ -162,9 +163,15 @@ async def create_order(
     await db.commit()
     await db.refresh(order)
 
-    # Load items for response
+    # Load items, supplier, and consumer for response
     result = await db.execute(
-        select(Order).options(selectinload(Order.items)).where(Order.id == order.id)
+        select(Order)
+        .options(
+            selectinload(Order.items),
+            joinedload(Order.supplier).joinedload(Supplier.user),
+            joinedload(Order.consumer).joinedload(Consumer.user),
+        )
+        .where(Order.id == order.id)
     )
     order = result.scalar_one()
 
@@ -178,9 +185,15 @@ async def get_order(
     db: AsyncSession = Depends(get_db),
 ) -> OrderResponse:
     """Get a single order (consumer or supplier staff)."""
-    # Get order with items
+    # Get order with items, supplier, and consumer
     result = await db.execute(
-        select(Order).options(selectinload(Order.items)).where(Order.id == order_id)
+        select(Order)
+        .options(
+            selectinload(Order.items),
+            joinedload(Order.supplier).joinedload(Supplier.user),
+            joinedload(Order.consumer).joinedload(Consumer.user),
+        )
+        .where(Order.id == order_id)
     )
     order = result.scalar_one_or_none()
     if not order:
@@ -223,7 +236,11 @@ async def get_orders(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Get orders (consumer: own orders, supplier staff: their supplier's orders)."""
-    query = select(Order).options(selectinload(Order.items))
+    query = select(Order).options(
+        selectinload(Order.items),
+        joinedload(Order.supplier).joinedload(Supplier.user),
+        joinedload(Order.consumer).joinedload(Consumer.user),
+    )
     consumer_id: int | None = None
     supplier_id: int | None = None
 
@@ -343,9 +360,15 @@ async def update_order_status(
     await db.commit()
     await db.refresh(order)
 
-    # Reload with items
+    # Reload with items, supplier, and consumer
     result = await db.execute(
-        select(Order).options(selectinload(Order.items)).where(Order.id == order.id)
+        select(Order)
+        .options(
+            selectinload(Order.items),
+            joinedload(Order.supplier).joinedload(Supplier.user),
+            joinedload(Order.consumer).joinedload(Consumer.user),
+        )
+        .where(Order.id == order.id)
     )
     order = result.scalar_one()
 

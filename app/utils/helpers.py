@@ -12,6 +12,7 @@ from app.modules.user.model import User
 async def get_user_by_email(email: str, db: AsyncSession) -> User | None:
     """Get user by email address."""
     result = await db.execute(select(User).where(User.email == email))
+    print(result)
     return result.scalar_one_or_none()
 
 

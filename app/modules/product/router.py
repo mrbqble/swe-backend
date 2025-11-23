@@ -5,6 +5,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import get_current_user
 from app.core.constants import ErrorMessages
@@ -271,3 +272,118 @@ async def get_products(
         ProductResponse.model_validate(product) for product in products
     ]
     return create_pagination_response(product_responses, page, size, total).model_dump()
+
+
+@ProductRouter.get(
+    "/me",
+    response_model=dict,  # PaginationResponse[ProductResponse]
+    summary="Get my products",
+    description="Get paginated list of products for the authenticated supplier (owner/manager only).",
+    responses={
+        200: {"description": "Products retrieved successfully"},
+        403: {"description": "Insufficient permissions"},
+        404: {"description": "Supplier profile not found"},
+    },
+)
+async def get_my_products(
+    current_user: Annotated[User, Depends(get_current_user)],
+    page: int = Query(1, ge=1, description="Page number (starts at 1)"),
+    size: int = Query(20, ge=1, le=100, description="Page size (max 100)"),
+    is_active: bool | None = Query(None, description="Filter by active status"),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """
+    Get products for the authenticated supplier.
+
+    **Role Requirements:** supplier_owner, supplier_manager
+
+    **Pagination:** Results are paginated with max page size of 100.
+    """
+    # Check user is supplier owner or manager
+    if current_user.role not in (
+        Role.SUPPLIER_OWNER.value,
+        Role.SUPPLIER_MANAGER.value,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=ErrorMessages.NOT_ENOUGH_PERMISSIONS,
+        )
+
+    # Get supplier ID for user
+    supplier_id = await _get_supplier_id_for_user(current_user, db)
+    if not supplier_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Supplier profile not found",
+        )
+
+    # Build query for this supplier's products
+    query = select(Product).where(Product.supplier_id == supplier_id)
+    if is_active is not None:
+        query = query.where(Product.is_active == is_active)
+
+    # Get total count
+    count_query = select(func.count(Product.id)).where(
+        Product.supplier_id == supplier_id
+    )
+    if is_active is not None:
+        count_query = count_query.where(Product.is_active == is_active)
+    count_result = await db.execute(count_query)
+    total = count_result.scalar_one() or 0
+
+    # Get paginated results
+    query = (
+        query.order_by(Product.created_at.desc()).offset((page - 1) * size).limit(size)
+    )
+    result = await db.execute(query)
+    products = result.scalars().all()
+
+    # Create response
+    product_responses = [
+        ProductResponse.model_validate(product) for product in products
+    ]
+    return create_pagination_response(product_responses, page, size, total).model_dump()
+
+
+@ProductRouter.get(
+    "/{product_id}",
+    response_model=dict,
+    summary="Get product by ID",
+    description="Get a single product by its ID. Public endpoint (no authentication required).",
+    responses={
+        200: {"description": "Product retrieved successfully"},
+        404: {"description": "Product not found"},
+    },
+)
+async def get_product(
+    product_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """
+    Get a single product by ID.
+
+    **Role Requirements:** None (public endpoint)
+    """
+    # Get product with supplier relationship loaded
+    result = await db.execute(
+        select(Product)
+        .options(selectinload(Product.supplier))
+        .where(Product.id == product_id)
+    )
+    product = result.scalar_one_or_none()
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Product not found",
+        )
+
+    # Convert to response and include supplier info if available
+    product_dict = ProductResponse.model_validate(product).model_dump()
+    if product.supplier:
+        product_dict["supplier"] = {
+            "id": product.supplier.id,
+            "company_name": product.supplier.company_name,
+            "name": product.supplier.company_name,
+        }
+
+    return product_dict

@@ -49,7 +49,7 @@ class OrderStatusUpdate(BaseModel):
     """Schema for updating order status."""
 
     model_config = ConfigDict(
-        strict=True,
+        strict=False,  # Allow string values for enum when deserializing from JSON
         json_schema_extra={
             "example": {
                 "status": "accepted",
@@ -82,6 +82,24 @@ class OrderItemResponse(BaseModel):
     product_id: int = Field(..., description="Product ID")
     qty: int = Field(..., description="Quantity")
     unit_price_kzt: Decimal = Field(..., description="Unit price in KZT")
+
+
+class SupplierInfo(BaseModel):
+    """Schema for supplier information in order response."""
+
+    model_config = ConfigDict(from_attributes=True, strict=False)
+
+    id: int = Field(..., description="Supplier ID")
+    company_name: str = Field(..., description="Company name")
+
+
+class ConsumerInfo(BaseModel):
+    """Schema for consumer information in order response."""
+
+    model_config = ConfigDict(from_attributes=True, strict=False)
+
+    id: int = Field(..., description="Consumer ID")
+    organization_name: str = Field(..., description="Organization name")
 
 
 class OrderResponse(BaseModel):
@@ -120,3 +138,5 @@ class OrderResponse(BaseModel):
     items: list[OrderItemResponse] = Field(
         default_factory=list, description="Order items"
     )
+    supplier: SupplierInfo | None = Field(None, description="Supplier information")
+    consumer: ConsumerInfo | None = Field(None, description="Consumer information")

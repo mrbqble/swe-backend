@@ -1,11 +1,13 @@
 """Authentication routes."""
 
+import contextlib
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.constants import ErrorMessages
+from app.core.roles import Role
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -18,12 +20,11 @@ from app.modules.auth.schema import (
     SignupRequest,
     TokenResponse,
 )
-from app.modules.user.model import User
 from app.modules.consumer.model import Consumer
+from app.modules.user.model import User
 from app.utils.hashing import hash_password, verify_password
 from app.utils.helpers import get_user_by_email, get_user_by_id
 from app.utils.password_policy import validate_password_policy
-from app.core.roles import Role
 
 AuthRouter = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger(__name__)
@@ -69,6 +70,7 @@ async def signup(
     - At least one digit
     """
     existing_user = await get_user_by_email(request.email, db)
+
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -88,19 +90,26 @@ async def signup(
     user = User(
         email=request.email,
         password_hash=password_hash,
+        first_name=request.first_name,
+        last_name=request.last_name,
         role=request.role.value,
     )
 
     # Create user and consumer (if applicable) in a single commit so
     # consumer profile creation cannot silently fail after user is created.
+    consumer = None
     try:
-        role_value = request.role.value if hasattr(request.role, "value") else str(request.role)
+        role_value = (
+            request.role.value if hasattr(request.role, "value") else str(request.role)
+        )
         db.add(user)
         # Flush so user.id is populated for the consumer FK
         await db.flush()
         if role_value == Role.CONSUMER.value:
             org_name = getattr(request, "organization_name", None) or (
-                user.email.split("@")[0] if user and user.email else f"consumer-{user.id}"
+                user.email.split("@")[0]
+                if user and user.email
+                else f"consumer-{user.id}"
             )
             consumer = Consumer(user_id=user.id, organization_name=org_name)
             db.add(consumer)
@@ -109,18 +118,14 @@ async def signup(
 
         # Refresh the user (and consumer if created) to populate model fields
         await db.refresh(user)
-        if role_value == Role.CONSUMER.value:
-            try:
-                await db.refresh(consumer)
-            except Exception:
+        if role_value == Role.CONSUMER.value and consumer is not None:
+            with contextlib.suppress(Exception):
                 # If refresh fails, continue; creation likely succeeded
-                pass
+                await db.refresh(consumer)
     except Exception as e:
         # Rollback and surface error
-        try:
+        with contextlib.suppress(Exception):
             await db.rollback()
-        except Exception:
-            pass
         logger.error(f"Failed to create user and consumer: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

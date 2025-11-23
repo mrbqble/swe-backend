@@ -15,6 +15,8 @@ class UserResponse(BaseModel):
             "example": {
                 "id": 1,
                 "email": "user@example.com",
+                "first_name": "John",
+                "last_name": "Doe",
                 "role": "consumer",
                 "is_active": True,
                 "created_at": "2024-01-15T10:30:00Z",
@@ -24,6 +26,8 @@ class UserResponse(BaseModel):
 
     id: int
     email: EmailStr
+    first_name: str
+    last_name: str
     role: str
     is_active: bool
     created_at: datetime

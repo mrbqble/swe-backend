@@ -16,6 +16,8 @@ class SignupRequest(BaseModel):
             "example": {
                 "email": "user@example.com",
                 "password": "SecurePass123",
+                "first_name": "John",
+                "last_name": "Doe",
                 "role": "consumer",
             }
         },
@@ -28,10 +30,18 @@ class SignupRequest(BaseModel):
         max_length=128,  # Reasonable max length for passwords
         description="User password (min 8 chars, must contain uppercase, lowercase, and digit)",
     )
+    first_name: str = Field(
+        ..., min_length=1, max_length=100, description="User first name"
+    )
+    last_name: str = Field(
+        ..., min_length=1, max_length=100, description="User last name"
+    )
     role: Literal[Role.CONSUMER, Role.SUPPLIER_OWNER] = Field(
         ..., description="User role (consumer or supplier_owner)"
     )
-    organization_name: str | None = Field(None, description="Optional consumer organization name")
+    organization_name: str | None = Field(
+        None, description="Optional consumer organization name"
+    )
 
 
 class LoginRequest(BaseModel):

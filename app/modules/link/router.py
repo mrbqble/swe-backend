@@ -1,8 +1,8 @@
 """Link management routes."""
 
-from typing import Annotated, Any
-
+import contextlib
 import logging
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
@@ -67,16 +67,14 @@ async def create_link_request(
     # Get consumer
     consumer = await get_consumer_by_user_id(current_user.id, db)
     # Debug logging to help diagnose missing consumer profiles during integration
-    try:
+    with contextlib.suppress(Exception):
+        # Avoid failing the request because logging failed
         logger.info(
             "create_link_request: user_id=%s role=%s consumer_found=%s",
             current_user.id,
             current_user.role,
             bool(consumer),
         )
-    except Exception:
-        # Avoid failing the request because logging failed
-        pass
     if not consumer:
         logger.warning(
             "Consumer profile not found for user_id=%s when creating link request",
@@ -124,7 +122,9 @@ async def create_link_request(
 
     # Reload link with supplier relationship for response convenience
     result = await db.execute(
-        select(Link).options(selectinload(Link.supplier), selectinload(Link.consumer)).where(Link.id == link.id)
+        select(Link)
+        .options(selectinload(Link.supplier), selectinload(Link.consumer))
+        .where(Link.id == link.id)
     )
     link = result.scalar_one()
 
@@ -178,9 +178,11 @@ async def update_link_status(
     await db.commit()
     await db.refresh(link)
 
-    # Reload link with supplier
+    # Reload link with supplier and consumer for response
     result = await db.execute(
-        select(Link).options(selectinload(Link.supplier)).where(Link.id == link_id)
+        select(Link)
+        .options(selectinload(Link.supplier), selectinload(Link.consumer))
+        .where(Link.id == link_id)
     )
     link = result.scalar_one()
 

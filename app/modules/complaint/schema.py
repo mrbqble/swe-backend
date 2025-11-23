@@ -49,6 +49,23 @@ class ComplaintStatusUpdate(BaseModel):
     )
 
 
+class ComplaintFeedbackUpdate(BaseModel):
+    """Consumer feedback update request schema."""
+
+    model_config = ConfigDict(
+        strict=True,
+        json_schema_extra={
+            "example": {
+                "satisfied": True,
+            }
+        },
+    )
+
+    satisfied: bool = Field(
+        ..., description="Whether the consumer is satisfied with the resolution"
+    )
+
+
 class ComplaintResponse(BaseModel):
     """Complaint response schema."""
 
@@ -78,4 +95,8 @@ class ComplaintResponse(BaseModel):
     status: ComplaintStatus
     description: str
     resolution: str | None
+    consumer_feedback: bool | None = Field(
+        None,
+        description="Consumer feedback: true=satisfied, false=not satisfied, null=no feedback",
+    )
     created_at: datetime
