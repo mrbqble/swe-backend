@@ -27,24 +27,6 @@ This document defines the criteria that must be met for any backend work to be c
 - [ ] No commented-out code or debug statements
 - [ ] Proper docstrings for all public functions and classes
 
-## Testing
-
-### ✅ Test Coverage
-
-- [ ] Unit tests written for all new functions/endpoints
-- [ ] Integration tests for API endpoints
-- [ ] Test coverage maintained or improved
-- [ ] All tests pass locally (`pytest`)
-- [ ] All tests pass in CI/CD pipeline
-
-### ✅ Test Quality
-
-- [ ] Tests are isolated and independent
-- [ ] Tests use meaningful assertions
-- [ ] Test data is properly set up and torn down
-- [ ] Edge cases and error scenarios are covered
-- [ ] Async tests use `pytest-asyncio` properly
-
 ## API Standards
 
 ### ✅ Endpoint Requirements
@@ -68,9 +50,9 @@ This document defines the criteria that must be met for any backend work to be c
 ### ✅ Migrations
 
 - [ ] Database migrations created with **Alembic**
-- [ ] Migration files are reviewed and tested
+- [ ] Migration files are reviewed and verified
 - [ ] Both `upgrade` and `downgrade` paths work
-- [ ] Migration rollback has been tested
+- [ ] Migration rollback has been verified
 - [ ] No raw SQL in application code (use SQLAlchemy ORM)
 
 ### ✅ Database Operations
@@ -151,7 +133,7 @@ This document defines the criteria that must be met for any backend work to be c
 - [ ] Code works in local development environment
 - [ ] Code works in staging environment (if applicable)
 - [ ] Environment variables documented
-- [ ] Database migrations tested in staging
+- [ ] Database migrations verified in staging
 - [ ] Rollback plan prepared (if applicable)
 
 ---

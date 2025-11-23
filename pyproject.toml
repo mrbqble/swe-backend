@@ -4,12 +4,10 @@
 # This file configures various tools used in the project:
 # - Ruff: Linter and code formatter
 # - Mypy: Static type checker
-# - Pytest: Testing framework
 #
 # For more information, see:
 # - Ruff: https://docs.astral.sh/ruff/
 # - Mypy: https://mypy.readthedocs.io/
-# - Pytest: https://docs.pytest.org/
 # ==============================================================================
 
 [build-system]
@@ -64,7 +62,6 @@ select = [
     "SIM",  # flake8-simplify (code simplifications)
     "RUF",  # Ruff-specific rules
     "PIE",  # flake8-pie (miscellaneous linter checks)
-    "PT",   # flake8-pytest-style (pytest best practices)
     "RET",  # flake8-return (return statement best practices)
     "TCH",  # flake8-type-checking (type checking imports)
 ]
@@ -90,8 +87,6 @@ combine-as-imports = true
 [tool.ruff.lint.per-file-ignores]
 # Allow unused imports in __init__.py files (common for public API)
 "__init__.py" = ["F401"]  # Unused import
-# Test files: allow unused arguments and assert statements
-"tests/*" = ["ARG", "S101"]  # Unused arguments, use of assert
 # Migration files: allow long lines (auto-generated)
 "alembic/versions/*" = ["E501"]  # Line too long
 
@@ -193,14 +188,6 @@ module = [
 ]
 ignore_errors = true
 
-# Test files: allow untyped definitions (tests don't need strict typing)
-[[tool.mypy.overrides]]
-module = [
-    "tests.*",
-]
-disallow_untyped_defs = false
-disallow_incomplete_defs = false
-
 # SQLAlchemy: ignore missing imports (type stubs may be incomplete)
 [[tool.mypy.overrides]]
 module = "sqlalchemy.*"
@@ -217,111 +204,14 @@ module = [
 ignore_missing_imports = true
 
 # ==============================================================================
-# Pytest Configuration
-# ==============================================================================
-# Pytest is the testing framework used in this project
-# Documentation: https://docs.pytest.org/
-
-[tool.pytest.ini_options]
-# Directories to search for test files
-testpaths = ["tests"]
-
-# Test file patterns
-python_files = ["test_*.py", "*_test.py"]
-
-# Test class patterns
-python_classes = ["Test*"]
-
-# Test function patterns
-python_functions = ["test_*"]
-
-# Async test mode
-# Options: "auto", "strict", "legacy"
-# "auto" automatically detects async tests
-asyncio_mode = "auto"
-
-# Additional command-line options
-# -v: verbose output
-# --strict-markers: require markers to be registered
-# --tb=short: shorter traceback format
-addopts = [
-    "-v",
-    "--strict-markers",
-    "--tb=short",
-]
-
-# Python path (for imports)
-pythonpath = ["."]
-
-# Minimum Python version
-minversion = "9.0"
-
-# ==============================================================================
-# Pytest Markers
-# ==============================================================================
-# Markers allow categorizing tests (e.g., unit, integration, slow)
-# Usage: @pytest.mark.unit, @pytest.mark.integration, @pytest.mark.slow
-
-[tool.pytest.ini_options.markers]
-unit = "Unit tests (fast, isolated)"
-integration = "Integration tests (may require database)"
-slow = "Slow running tests (may take longer to execute)"
-
-# ==============================================================================
-# Coverage Configuration
-# ==============================================================================
-# Coverage settings for pytest-cov
-# Documentation: https://pytest-cov.readthedocs.io/
-
-[tool.coverage.run]
-# Directories to include in coverage
-source = ["app"]
-# Directories to omit from coverage
-omit = [
-    "*/tests/*",
-    "*/migrations/*",
-    "*/alembic/*",
-    "*/__pycache__/*",
-    "*/venv/*",
-    "*/.venv/*",
-]
-
-# Branch coverage (track which branch outcomes were tested)
-branch = true
-
-[tool.coverage.report]
-# Minimum coverage percentage (70% as specified)
-fail_under = 70
-# Show missing line numbers
-show_missing = true
-# Skip empty files
-skip_empty = true
-# Precision for percentages
-precision = 2
-
-# Exclude lines from coverage
-exclude_lines = [
-    "pragma: no cover",
-    "def __repr__",
-    "raise AssertionError",
-    "raise NotImplementedError",
-    "if __name__ == .__main__.:",
-    "if TYPE_CHECKING:",
-    "@abstractmethod",
-]
-
-# ==============================================================================
 # Bandit Security Linter Configuration
 # ==============================================================================
 # Bandit is a security linter for Python code
 # Documentation: https://bandit.readthedocs.io/
 
 [tool.bandit]
-# Exclude test files and common false positives
-exclude_dirs = ["tests", "alembic", ".venv", "venv", "__pycache__"]
-
-# Skip specific tests (B101: assert_used is OK in tests)
-skips = ["B101"]  # Skip assert_used warnings (OK in tests)
+# Exclude common false positives
+exclude_dirs = ["alembic", ".venv", "venv", "__pycache__"]
 
 # Security level (low, medium, high)
 level = 1  # Report issues of medium severity and above

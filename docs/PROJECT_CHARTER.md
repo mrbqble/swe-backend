@@ -14,12 +14,9 @@
 - SQLAlchemy 2.x (async)
 - Alembic (migrations)
 
-**Validation & Testing:**
+**Validation:**
 
 - Pydantic v2 (data validation)
-- pytest (testing framework)
-- httpx (async HTTP client for tests)
-- pytest-asyncio (async test support)
 
 **Code Quality:**
 

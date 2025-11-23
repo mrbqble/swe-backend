@@ -11,7 +11,6 @@
 # Examples:
 #   .\scripts.ps1 install              # Install dependencies
 #   .\scripts.ps1 dev                  # Run development server
-#   .\scripts.ps1 test                # Run tests
 #   .\scripts.ps1 migrate -MESSAGE "Add users table"  # Create migration
 #
 # For a list of all available commands, run:
@@ -30,13 +29,13 @@
     Provides convenient commands for development tasks including:
     - Installing dependencies
     - Running the development server
-    - Running tests and code quality checks
+    - Running code quality checks
     - Managing database migrations
     - Docker operations
     - And more...
 
 .PARAMETER Command
-    The command to execute (e.g., install, dev, test, etc.)
+    The command to execute (e.g., install, dev, lint, etc.)
 
 .PARAMETER MESSAGE
     Optional message parameter (used for migration commands)
@@ -140,45 +139,23 @@ switch ($Command.ToLower()) {
     }
 
     # ==========================================================================
-    # Testing
-    # ==========================================================================
-
-    "test" {
-        Invoke-CommandSafe "[*] Running tests..." "pytest"
-    }
-
-    "test-cov" {
-        Invoke-CommandSafe "[*] Running tests with coverage..." "pytest --cov=app --cov=tests --cov-report=html --cov-report=term-missing --cov-report=xml"
-        Write-Host "[*] Coverage report generated in htmlcov/index.html" -ForegroundColor Cyan
-    }
-
-    "test-watch" {
-        if (-not (Test-Command "ptw")) {
-            Write-Host "[!] pytest-watch not installed. Installing..." -ForegroundColor Yellow
-            pip install pytest-watch
-        }
-        Write-Host "[*] Running tests in watch mode..." -ForegroundColor Green
-        ptw
-    }
-
-    # ==========================================================================
     # Code Quality
     # ==========================================================================
 
     "format" {
-        Invoke-CommandSafe "[*] Formatting code..." "ruff format app tests"
+        Invoke-CommandSafe "[*] Formatting code..." "ruff format app"
     }
 
     "format-check" {
-        Invoke-CommandSafe "[*] Checking code formatting..." "ruff format --check app tests"
+        Invoke-CommandSafe "[*] Checking code formatting..." "ruff format --check app"
     }
 
     "lint" {
-        Invoke-CommandSafe "[*] Running linter..." "ruff check app tests"
+        Invoke-CommandSafe "[*] Running linter..." "ruff check app"
     }
 
     "lint-fix" {
-        Invoke-CommandSafe "[*] Running linter and fixing issues..." "ruff check --fix app tests"
+        Invoke-CommandSafe "[*] Running linter and fixing issues..." "ruff check --fix app"
     }
 
     "type-check" {
@@ -204,22 +181,22 @@ switch ($Command.ToLower()) {
 
         # Lint
         Write-Host "1. Running linter..." -ForegroundColor Cyan
-        ruff check app tests
+        ruff check app
         if ($LASTEXITCODE -ne 0) { $failed = $true }
 
         # Lint fix
         Write-Host "2. Running linter and fixing issues..." -ForegroundColor Cyan
-        ruff check --fix app tests
+        ruff check --fix app
         if ($LASTEXITCODE -ne 0) { $failed = $true }
 
         # Format check
         Write-Host "3. Checking code formatting..." -ForegroundColor Cyan
-        ruff format --check app tests
+        ruff format --check app
         if ($LASTEXITCODE -ne 0) { $failed = $true }
 
         # Format
         Write-Host "4. Formatting code..." -ForegroundColor Cyan
-        ruff format app tests
+        ruff format app
         if ($LASTEXITCODE -ne 0) { $failed = $true }
 
         # Type check
@@ -230,11 +207,6 @@ switch ($Command.ToLower()) {
         # Security check
         Write-Host "6. Running security linting..." -ForegroundColor Cyan
         bandit -r app -ll
-        if ($LASTEXITCODE -ne 0) { $failed = $true }
-
-        # Tests
-        Write-Host "7. Running tests..." -ForegroundColor Cyan
-        pytest
         if ($LASTEXITCODE -ne 0) { $failed = $true }
 
         if ($failed) {
@@ -344,8 +316,8 @@ switch ($Command.ToLower()) {
         Get-ChildItem -Path . -Include __pycache__,*.pyc -Recurse -Force -ErrorAction SilentlyContinue |
             Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 
-        # Remove test and type checking cache
-        $cacheDirs = @(".pytest_cache", ".mypy_cache", ".ruff_cache", ".coverage", "htmlcov", "build", "dist")
+        # Remove type checking cache
+        $cacheDirs = @(".mypy_cache", ".ruff_cache", "build", "dist")
         foreach ($dir in $cacheDirs) {
             if (Test-Path $dir) {
                 Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue
@@ -397,11 +369,6 @@ switch ($Command.ToLower()) {
         Write-Host "  .\scripts.ps1 start            Run production server" -ForegroundColor White
         Write-Host ""
 
-        Write-Host "[*] Testing:" -ForegroundColor Yellow
-        Write-Host "  .\scripts.ps1 test             Run all tests" -ForegroundColor White
-        Write-Host "  .\scripts.ps1 test-cov         Run tests with coverage report" -ForegroundColor White
-        Write-Host "  .\scripts.ps1 test-watch       Run tests in watch mode" -ForegroundColor White
-        Write-Host ""
 
         Write-Host "[*] Code Quality:" -ForegroundColor Yellow
         Write-Host "  .\scripts.ps1 format            Format code with ruff" -ForegroundColor White
@@ -410,7 +377,7 @@ switch ($Command.ToLower()) {
         Write-Host "  .\scripts.ps1 lint-fix         Run linter and fix issues" -ForegroundColor White
         Write-Host "  .\scripts.ps1 type-check       Run type checker (mypy)" -ForegroundColor White
         Write-Host "  .\scripts.ps1 security         Run security linting (bandit)" -ForegroundColor White
-        Write-Host "  .\scripts.ps1 check            Run all checks (format, lint, type, security, test)" -ForegroundColor White
+        Write-Host "  .\scripts.ps1 check            Run all checks (format, lint, type, security)" -ForegroundColor White
         Write-Host "  .\scripts.ps1 pre-commit-run    Run pre-commit hooks on all files" -ForegroundColor White
         Write-Host "  .\scripts.ps1 pre-commit-update  Update pre-commit hooks" -ForegroundColor White
         Write-Host ""

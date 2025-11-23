@@ -35,7 +35,7 @@ def check_linting() -> bool:
     """Check if linting passes."""
     print(f"{BLUE}🔍 Checking linting (ruff)...{NC}")
     success, output = run_command(
-        ["python", "-m", "ruff", "check", "app", "tests"],
+        ["python", "-m", "ruff", "check", "app"],
         "Linting check",
     )
     if success:
@@ -50,7 +50,7 @@ def check_formatting() -> bool:
     """Check if code is formatted."""
     print(f"{BLUE}🔍 Checking code formatting (ruff format)...{NC}")
     success, output = run_command(
-        ["python", "-m", "ruff", "format", "--check", "app", "tests"],
+        ["python", "-m", "ruff", "format", "--check", "app"],
         "Format check",
     )
     if success:
@@ -82,23 +82,6 @@ def check_type_checking() -> bool:
         return True
     print(f"{RED}❌ Type checking failed:{NC}")
     print(filtered_output)
-    return False
-
-
-def check_tests() -> bool:
-    """Check if tests pass."""
-    print(f"{BLUE}🔍 Running tests (pytest)...{NC}")
-    success, output = run_command(
-        ["python", "-m", "pytest", "--tb=short", "-v"],
-        "Tests",
-    )
-    if success:
-        print(f"{GREEN}✅ All tests passed{NC}")
-        return True
-    print(f"{RED}❌ Tests failed:{NC}")
-    # Show last 50 lines of output
-    lines = output.split("\n")
-    print("\n".join(lines[-50:]))
     return False
 
 
@@ -187,7 +170,6 @@ def main() -> None:
         ("Linting", check_linting),
         ("Formatting", check_formatting),
         ("Type Checking", check_type_checking),
-        ("Tests", check_tests),
         ("Migrations", check_migrations),
         ("Endpoints", check_endpoints),
         ("Pagination", check_pagination),

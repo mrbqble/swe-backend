@@ -21,7 +21,6 @@ class Settings(BaseSettings):
     DESCRIPTION: str = "A minimal, production-ready FastAPI server"
     ENV: str = "dev"
     DATABASE_URL: str = "postgresql+asyncpg://postgres:2148@localhost:5432/postgres"
-    TEST_DATABASE_URL: str | None = None  # Optional test database URL
     SECRET_KEY: str = "change-me-in-production"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30

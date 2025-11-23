@@ -145,8 +145,7 @@ curl -X POST http://localhost:8000/api/v1/auth/login \
    - Supplier flow (signup → staff → products → links → orders → complaints)
    - Include screenshots or demo script output
 
-5. **Testing & Quality**
-   - Test coverage report
+5. **Code Quality**
    - Code quality metrics
    - Security scanning results
 
@@ -174,13 +173,6 @@ curl -X POST http://localhost:8000/api/v1/auth/login \
 - Input validation and size limits
 - Security linting with Bandit
 
-### Testing
-
-- 150+ integration and unit tests
-- 70%+ code coverage
-- State machine tests
-- Access rule tests
-- End-to-end flow tests
 
 ### Observability
 
@@ -196,7 +188,6 @@ Include in your submission:
 1. **Code Repository**
    - Complete source code
    - All documentation files
-   - Test suite
 
 2. **Documentation**
    - `docs/MODULES.md` - Module documentation
@@ -227,7 +218,6 @@ Include in your submission:
 Before submission, verify:
 
 - [ ] API starts successfully
-- [ ] All tests pass (`make test`)
 - [ ] OpenAPI schema exported (`make export-openapi`)
 - [ ] Swagger screenshots taken
 - [ ] Module documentation complete

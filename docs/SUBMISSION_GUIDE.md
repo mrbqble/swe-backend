@@ -79,7 +79,7 @@ Open in browser:
 - **ReDoc**: http://localhost:8000/redoc
 - **OpenAPI JSON**: http://localhost:8000/openapi.json
 
-### 3. Test Authentication
+### 3. Verify Authentication
 
 ```bash
 # Login with seeded consumer
@@ -102,7 +102,7 @@ curl -X POST http://localhost:8000/api/v1/auth/login \
 
 ## 📋 Seeded Data
 
-After running `python scripts/seed.py`, the following test accounts are available:
+After running `python scripts/seed.py`, the following sample accounts are available:
 
 ### Users
 
@@ -144,7 +144,7 @@ make demo
 
 ### Manual Demo Flow
 
-Follow these steps to manually test the complete flow:
+Follow these steps to manually verify the complete flow:
 
 #### Consumer Flow
 
@@ -232,7 +232,7 @@ Follow these steps to manually test the complete flow:
      -d '{"status": "accepted"}'
    ```
 
-## 📊 Module Testing Checklist
+## 📊 Module Verification Checklist
 
 ### ✅ Authentication Module
 - [ ] Signup creates user and returns tokens
@@ -299,7 +299,6 @@ swe-backend/
 │   ├── seed.py         # Database seeding
 │   ├── demo.sh         # Demo script
 │   └── export_openapi.py
-├── tests/              # Test suite
 ├── requirements.txt    # Dependencies
 ├── pyproject.toml     # Tool configuration
 └── README.md          # Main documentation
@@ -320,7 +319,6 @@ This runs:
 - Formatting (ruff format)
 - Type checking (mypy)
 - Security scanning (bandit)
-- Tests (pytest)
 
 ## 📝 Documentation
 
@@ -383,4 +381,3 @@ The API meets all acceptance criteria if:
 - [x] OpenAPI docs accessible at `/docs`
 - [x] All endpoints return expected responses
 - [x] Error handling works correctly
-- [x] Tests pass: `make test`

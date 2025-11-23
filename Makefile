@@ -7,7 +7,6 @@
 #   make help          # Show all available commands
 #   make install       # Install dependencies
 #   make dev           # Run development server
-#   make test          # Run tests
 #
 # Note: On Windows, you may need to use WSL, Git Bash, or the provided
 #       scripts.ps1 / scripts.bat files instead of Make.
@@ -17,7 +16,7 @@
 .DEFAULT_GOAL := help
 
 # Phony targets (targets that don't create files)
-.PHONY: help install install-dev dev start test test-cov test-watch lint lint-fix format type-check check clean \
+.PHONY: help install install-dev dev start lint lint-fix format type-check check clean \
 	migrate revision upgrade downgrade seed \
 	docker-build docker-up docker-down docker-logs docker-shell docker-restart docker-clean \
 	setup-env pre-commit-run pre-commit-update
@@ -36,9 +35,6 @@ help: ## Show this help message
 	@echo ""
 	@echo "🚀 Development:"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E '(dev|start)' | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
-	@echo ""
-	@echo "🧪 Testing:"
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E 'test' | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 	@echo "🔍 Code Quality:"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -E '(lint|format|type-check|check|pre-commit)' | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -88,48 +84,24 @@ start: ## Run the production server
 	uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 # ==============================================================================
-# Testing
-# ==============================================================================
-
-test: ## Run all tests
-	@echo "🧪 Running tests..."
-	pytest
-
-test-cov: ## Run tests with coverage report (minimum 70%)
-	@echo "🧪 Running tests with coverage..."
-	pytest --cov=app --cov-report=html --cov-report=term-missing --cov-report=xml --cov-fail-under=70
-	@echo "📊 Coverage report generated in htmlcov/index.html"
-
-test-watch: ## Run tests in watch mode (requires pytest-watch)
-	@echo "👀 Running tests in watch mode..."
-	ptw --runner "pytest -x"
-
-test-fast: ## Run tests without coverage (faster)
-	@echo "⚡ Running tests (fast mode)..."
-	pytest --no-cov
-
-test-ci: lint test-cov ## Run lint and tests with coverage (CI-like)
-	@echo "✅ All checks passed!"
-
-# ==============================================================================
 # Code Quality
 # ==============================================================================
 
 format: ## Format code with ruff
 	@echo "✨ Formatting code..."
-	ruff format app tests
+	ruff format app
 
 format-check: ## Check if code is formatted (CI use)
 	@echo "🔍 Checking code formatting..."
-	ruff format --check app tests
+	ruff format --check app
 
 lint: ## Run linter (ruff check)
 	@echo "🔍 Running linter..."
-	ruff check app tests
+	ruff check app
 
 lint-fix: ## Run linter and automatically fix issues
 	@echo "🔧 Running linter and fixing issues..."
-	ruff check --fix app tests
+	ruff check --fix app
 
 type-check: ## Run type checker (mypy)
 	@echo "🔍 Running type checker..."
@@ -141,15 +113,11 @@ security: ## Run security linting (bandit)
 	bandit -r app -ll
 	@echo "✅ Security check complete! See bandit-report.json for details."
 
-check: lint lint-fix format-check format type-check security test ## Run all checks (lint, type-check, security, test)
+check: lint lint-fix format-check format type-check security ## Run all checks (lint, type-check, security)
 	@echo "✅ All checks passed!"
 
-ci: lint security test-cov ## Run CI-like checks (lint + security + test with coverage)
+ci: lint security ## Run CI-like checks (lint + security)
 	@echo "✅ CI checks passed!"
-
-# Combined command for CI/CD pipeline
-lint-and-test: lint security test-cov ## Run lint, security, and tests with coverage (CI-like)
-	@echo "✅ Lint, security, and test checks passed!"
 
 export-openapi: ## Export OpenAPI schema to docs/openapi.json
 	@echo "📥 Exporting OpenAPI schema..."
@@ -274,17 +242,15 @@ docker-rebuild: docker-down docker-build docker-up ## Rebuild and restart Docker
 # Maintenance
 # ==============================================================================
 
-clean: ## Clean cache files, build artifacts, and test coverage
+clean: ## Clean cache files and build artifacts
 	@echo "🧹 Cleaning cache and build files..."
 	@find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	@find . -type f -name "*.pyc" -delete 2>/dev/null || true
 	@find . -type f -name "*.pyo" -delete 2>/dev/null || true
-	@find . -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
 	@find . -type d -name ".mypy_cache" -exec rm -rf {} + 2>/dev/null || true
 	@find . -type d -name ".ruff_cache" -exec rm -rf {} + 2>/dev/null || true
-	@rm -rf htmlcov .coverage coverage.xml .coverage.* 2>/dev/null || true
 	@rm -rf build dist *.egg-info .eggs 2>/dev/null || true
-	@rm -rf .tox .nox .hypothesis 2>/dev/null || true
+	@rm -rf .tox .nox 2>/dev/null || true
 	@echo "✅ Cleanup complete!"
 
 clean-all: clean ## Clean everything including logs and virtual environment

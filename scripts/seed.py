@@ -1,6 +1,6 @@
 """Database seeding script.
 
-This script creates initial seed data for development and testing:
+This script creates initial seed data for development:
 - One supplier with owner, manager, and sales staff
 - One consumer
 - Sample products
@@ -23,9 +23,6 @@ from app.modules.product.model import Product
 from app.modules.supplier.model import Supplier, SupplierStaff
 from app.modules.user.model import User
 from app.utils.hashing import hash_password
-import app.modules.chat.model
-import app.modules.complaint.model
-import app.modules.notification.model
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

@@ -72,7 +72,6 @@ A production-ready FastAPI backend for a B2B supplier-wholesale exchange platfor
 - **Database:** PostgreSQL with async SQLAlchemy 2.x
 - **Migrations:** Alembic
 - **Validation:** Pydantic v2
-- **Testing:** pytest, httpx, pytest-asyncio
 - **Code Quality:** Ruff (linter/formatter), mypy (type checking), pre-commit hooks
 - **Authentication:** JWT tokens, bcrypt password hashing
 
@@ -161,7 +160,7 @@ python -m uvicorn app.main:app --reload
 **API Docs:** http://localhost:8000/docs
 **ReDoc:** http://localhost:8000/redoc
 
-### 🧪 Test Credentials (After Seeding)
+### 🔑 Sample Credentials (After Seeding)
 
 After running `make seed` or `python scripts/seed.py`, you can log in with:
 
@@ -310,50 +309,6 @@ All endpoints are prefixed with `/api/v1`.
   - Returns: `{"status": "ok"|"degraded", "env": "...", "db": "ok"|"error"}`
   - Includes `X-Correlation-ID` header for request tracking
 
-## 🧪 Testing
-
-### Running Tests
-
-```bash
-# Run all tests
-make test
-# or
-python -m pytest
-
-# Run with coverage (minimum 70%)
-make test-cov
-# or
-python -m pytest --cov=app --cov-report=html --cov-fail-under=70
-
-# Run specific test file
-python -m pytest tests/test_auth_integration.py
-
-# Run with verbose output
-python -m pytest -v
-
-# Run specific test
-python -m pytest tests/test_orders_integration.py::test_create_order_as_consumer -xvs
-
-# Run CI-like checks (lint + test with coverage)
-make lint-and-test
-```
-
-### Test Coverage
-
-- **Target:** Minimum 70% line coverage
-- **Current:** 150+ integration and unit tests covering:
-  - All API endpoints (auth, RBAC, links, products, orders, chat, complaints, notifications)
-  - State machine transitions (order, link, complaint status)
-  - Access rules and RBAC permissions
-  - Business logic and validation
-
-### Test Structure
-
-- **Fixtures** (`tests/fixtures.py`): Comprehensive fixtures for users, roles, and sample data
-- **State Machines** (`tests/test_state_machines.py`): Tests for all state transitions
-- **Access Rules** (`tests/test_access_rules.py`): Tests for RBAC and permission checks
-- **Integration Tests**: Full API endpoint tests with database
-
 ## 🛠 Development Commands
 
 ### Using Make (Recommended)
@@ -361,11 +316,10 @@ make lint-and-test
 ```bash
 make help              # Show all available commands
 make dev               # Run development server
-make test              # Run all tests
 make lint              # Run linter
 make format            # Format code
 make type-check        # Run type checker
-make check             # Run all checks (lint, format, type-check, test)
+make check             # Run all checks (lint, format, type-check)
 make seed              # Seed database with sample data
 make upgrade           # Apply database migrations
 make migrate MESSAGE="description"  # Create new migration
@@ -379,10 +333,10 @@ make clean             # Clean cache and build files
 python -m uvicorn app.main:app --reload
 
 # Run linter
-python -m ruff check app tests
+python -m ruff check app
 
 # Format code
-python -m ruff format app tests
+python -m ruff format app
 
 # Type checking
 python -m mypy app
@@ -439,7 +393,6 @@ swe-backend/
 ├── alembic/                  # Database migrations
 ├── scripts/                  # Utility scripts
 │   └── seed.py              # Database seeding script
-├── tests/                    # Test suite
 ├── docs/                     # Documentation
 └── requirements.txt          # Python dependencies
 ```
@@ -537,7 +490,6 @@ The system includes 12 core domain models:
 - ✅ Phase 12: Cross-Cutting Quality (Validation, Security, Performance, Error Handling, Docs)
 - ✅ Phase 13: Seed Data & Developer Experience
 - ✅ Phase 14: Containerization & Local Orchestration
-- ✅ Phase 15: Automated Testing & Coverage
 - ✅ Phase 16: Observability & Ops
 - ✅ Phase 17: Security Hardening
 - ✅ Phase 18: Handover to Frontends
@@ -551,10 +503,8 @@ The system includes 12 core domain models:
 ## 🤝 Contributing
 
 1. Follow the existing code style (enforced by Ruff)
-2. Write tests for new features
-3. Ensure all tests pass before submitting
-4. Run type checking with mypy
-5. Follow the API versioning and error response standards
+2. Run type checking with mypy
+3. Follow the API versioning and error response standards
 
 ## 📄 License
 
