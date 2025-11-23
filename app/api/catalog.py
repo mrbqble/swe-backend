@@ -14,6 +14,7 @@ from app.modules.link.model import Link, LinkStatus
 from app.modules.product.model import Product
 from app.modules.product.schema import ProductResponse
 from app.modules.supplier.model import Supplier
+from app.modules.supplier.schema import SupplierResponse
 from app.modules.user.model import User
 from app.utils.helpers import get_consumer_by_user_id
 from app.utils.pagination import create_pagination_response
@@ -97,3 +98,36 @@ async def get_catalog(
         ProductResponse.model_validate(product) for product in products
     ]
     return create_pagination_response(product_responses, page, size, total).model_dump()
+
+
+@CatalogueRouter.get(
+    "/suppliers",
+    response_model=dict,
+    summary="List suppliers",
+    description="List supplier companies (paginated). Supports optional search query 'q'.",
+)
+async def list_suppliers(
+    q: str | None = Query(None, description="Search query for company name"),
+    page: int = Query(1, ge=1, description="Page number"),
+    size: int = Query(20, ge=1, le=100, description="Page size"),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """List suppliers (public). Returns paginated supplier objects."""
+    query = select(Supplier)
+    if q:
+        query = query.where(Supplier.company_name.ilike(f"%{q}%"))
+
+    # total count
+    count_query = select(func.count(Supplier.id))
+    if q:
+        count_query = count_query.where(Supplier.company_name.ilike(f"%{q}%"))
+    count_result = await db.execute(count_query)
+    total = count_result.scalar_one() or 0
+
+    # paginated
+    query = query.order_by(Supplier.company_name.asc()).offset((page - 1) * size).limit(size)
+    result = await db.execute(query)
+    suppliers = result.scalars().all()
+
+    supplier_responses = [SupplierResponse.model_validate(s) for s in suppliers]
+    return create_pagination_response(supplier_responses, page, size, total).model_dump()

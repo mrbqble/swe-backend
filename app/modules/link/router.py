@@ -2,6 +2,8 @@
 
 from typing import Annotated, Any
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,6 +25,8 @@ from app.utils.helpers import (
 from app.utils.pagination import create_pagination_response
 
 LinkRouter = APIRouter(prefix="/links", tags=["links"])
+
+logger = logging.getLogger(__name__)
 
 
 def _validate_status_transition(
@@ -62,7 +66,22 @@ async def create_link_request(
 
     # Get consumer
     consumer = await get_consumer_by_user_id(current_user.id, db)
+    # Debug logging to help diagnose missing consumer profiles during integration
+    try:
+        logger.info(
+            "create_link_request: user_id=%s role=%s consumer_found=%s",
+            current_user.id,
+            current_user.role,
+            bool(consumer),
+        )
+    except Exception:
+        # Avoid failing the request because logging failed
+        pass
     if not consumer:
+        logger.warning(
+            "Consumer profile not found for user_id=%s when creating link request",
+            current_user.id,
+        )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Consumer profile not found",
@@ -102,6 +121,12 @@ async def create_link_request(
     db.add(link)
     await db.commit()
     await db.refresh(link)
+
+    # Reload link with supplier relationship for response convenience
+    result = await db.execute(
+        select(Link).options(selectinload(Link.supplier), selectinload(Link.consumer)).where(Link.id == link.id)
+    )
+    link = result.scalar_one()
 
     return LinkResponse.model_validate(link)
 
@@ -219,6 +244,8 @@ async def get_incoming_links(
 
     # Get paginated results
     query = query.order_by(Link.created_at.desc()).offset((page - 1) * size).limit(size)
+    # ensure supplier and consumer relationships are loaded
+    query = query.options(selectinload(Link.supplier), selectinload(Link.consumer))
     result = await db.execute(query)
     links = result.scalars().all()
 
@@ -310,6 +337,7 @@ async def get_consumer_links(
 
     # Get paginated results
     query = query.order_by(Link.created_at.desc()).offset((page - 1) * size).limit(size)
+    query = query.options(selectinload(Link.supplier), selectinload(Link.consumer))
     result = await db.execute(query)
     links = result.scalars().all()
 

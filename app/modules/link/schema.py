@@ -5,6 +5,8 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.modules.link.model import LinkStatus
+from app.modules.supplier.schema import SupplierResponse
+from app.modules.consumer.schema import ConsumerResponse
 
 
 class LinkRequestCreate(BaseModel):
@@ -61,3 +63,6 @@ class LinkResponse(BaseModel):
     status: LinkStatus
     created_at: datetime
     updated_at: datetime
+    # Include supplier details for convenience so frontend can show company info
+    supplier: SupplierResponse | None = Field(None, description="Supplier info")
+    consumer: ConsumerResponse | None = Field(None, description="Consumer info")

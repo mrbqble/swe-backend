@@ -19,9 +19,11 @@ from app.modules.auth.schema import (
     TokenResponse,
 )
 from app.modules.user.model import User
+from app.modules.consumer.model import Consumer
 from app.utils.hashing import hash_password, verify_password
 from app.utils.helpers import get_user_by_email, get_user_by_id
 from app.utils.password_policy import validate_password_policy
+from app.core.roles import Role
 
 AuthRouter = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger(__name__)
@@ -88,17 +90,43 @@ async def signup(
         password_hash=password_hash,
         role=request.role.value,
     )
+
+    # Create user and consumer (if applicable) in a single commit so
+    # consumer profile creation cannot silently fail after user is created.
     try:
+        role_value = request.role.value if hasattr(request.role, "value") else str(request.role)
         db.add(user)
+        # Flush so user.id is populated for the consumer FK
+        await db.flush()
+        if role_value == Role.CONSUMER.value:
+            org_name = getattr(request, "organization_name", None) or (
+                user.email.split("@")[0] if user and user.email else f"consumer-{user.id}"
+            )
+            consumer = Consumer(user_id=user.id, organization_name=org_name)
+            db.add(consumer)
+
         await db.commit()
+
+        # Refresh the user (and consumer if created) to populate model fields
         await db.refresh(user)
+        if role_value == Role.CONSUMER.value:
+            try:
+                await db.refresh(consumer)
+            except Exception:
+                # If refresh fails, continue; creation likely succeeded
+                pass
     except Exception as e:
-        await db.rollback()
-        logger.error(f"Failed to create user: {e}", exc_info=True)
+        # Rollback and surface error
+        try:
+            await db.rollback()
+        except Exception:
+            pass
+        logger.error(f"Failed to create user and consumer: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=ErrorMessages.FAILED_TO_CREATE_USER,
         )
+
     return _create_tokens(user)
 
 

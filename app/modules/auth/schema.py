@@ -31,6 +31,7 @@ class SignupRequest(BaseModel):
     role: Literal[Role.CONSUMER, Role.SUPPLIER_OWNER] = Field(
         ..., description="User role (consumer or supplier_owner)"
     )
+    organization_name: str | None = Field(None, description="Optional consumer organization name")
 
 
 class LoginRequest(BaseModel):
