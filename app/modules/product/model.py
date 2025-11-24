@@ -29,6 +29,20 @@ class Product(Base):
     currency: Mapped[str] = mapped_column(String(3), default="KZT", nullable=False)
     sku: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     stock_qty: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    unit: Mapped[str | None] = mapped_column(String(50), nullable=True, default="pcs")
+    min_order_qty: Mapped[int | None] = mapped_column(Integer, nullable=True, default=1)
+    discount_percent: Mapped[Decimal | None] = mapped_column(
+        Numeric[Decimal](5, 2), nullable=True, default=None
+    )
+    delivery_available: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False
+    )
+    pickup_available: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False
+    )
+    lead_time_days: Mapped[int | None] = mapped_column(
+        Integer, nullable=True, default=None
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False

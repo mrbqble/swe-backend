@@ -4,6 +4,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.modules.user.schema import UserResponse
+
 
 class ConsumerResponse(BaseModel):
     """Short consumer schema for embedding in responses."""
@@ -13,3 +15,6 @@ class ConsumerResponse(BaseModel):
     id: int
     organization_name: str
     created_at: datetime
+    user: UserResponse | None = Field(
+        None, description="User information (first_name, last_name, email)"
+    )

@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 
 class SupplierResponse(BaseModel):
@@ -14,3 +14,12 @@ class SupplierResponse(BaseModel):
     company_name: str
     is_active: bool
     created_at: datetime
+
+
+class SupplierUpdate(BaseModel):
+    """Schema for supplier update."""
+
+    model_config = ConfigDict(from_attributes=True, strict=False)
+
+    company_name: str | None = None
+    is_active: bool | None = None

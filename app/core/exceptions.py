@@ -49,7 +49,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         )
 
         return JSONResponse(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             content=ErrorResponse(
                 detail="Validation error: Invalid input data",
                 code="VALIDATION_ERROR",
@@ -63,7 +63,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     ) -> JSONResponse:
         """Handle Pydantic model validation errors."""
         return JSONResponse(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             content=ErrorResponse(
                 detail="Validation error: Invalid model data",
                 code="VALIDATION_ERROR",
@@ -185,8 +185,14 @@ def register_exception_handlers(app: FastAPI) -> None:
                 },
             )
 
+        # Preserve headers from HTTPException (e.g., WWW-Authenticate for 401)
+        headers = {}
+        if hasattr(exc, "headers") and exc.headers:
+            headers.update(exc.headers)
+
         return JSONResponse(
             status_code=exc.status_code,
+            headers=headers,
             content=ErrorResponse(
                 detail=exc.detail,
                 code=error_code,

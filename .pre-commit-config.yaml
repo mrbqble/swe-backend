@@ -12,9 +12,11 @@ repos:
       - id: ruff
         args: [--fix]
         name: ruff (linter)
+        exclude: ^tests/
       # Run the formatter
       - id: ruff-format
         name: ruff (formatter)
+        exclude: ^tests/
 
   # Basic file checks
   - repo: https://github.com/pre-commit/pre-commit-hooks

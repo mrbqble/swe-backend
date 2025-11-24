@@ -2,13 +2,19 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.modules.consumer.schema import ConsumerResponse
+from app.modules.user.schema import UserResponse
 
 
 class ChatSessionCreate(BaseModel):
     """Chat session creation request schema."""
 
-    sales_rep_id: int = Field(..., description="Sales representative user ID")
+    sales_rep_id: int | None = Field(
+        None,
+        description="Sales representative user ID (auto-assigned if not provided and order_id is given)",
+    )
     order_id: int | None = Field(None, description="Optional order ID to link the chat")
 
 
@@ -31,23 +37,31 @@ class ChatMessageCreate(BaseModel):
 class ChatMessageResponse(BaseModel):
     """Chat message response schema."""
 
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     session_id: int
     sender_id: int
     text: str
     file_url: str | None
     created_at: datetime
-
-    model_config = {"from_attributes": True}
+    sender: UserResponse | None = Field(None, description="Sender user information")
 
 
 class ChatSessionResponse(BaseModel):
     """Chat session response schema."""
+
+    model_config = ConfigDict(from_attributes=True)
 
     id: int
     consumer_id: int
     sales_rep_id: int
     order_id: int | None
     created_at: datetime
-
-    model_config = {"from_attributes": True}
+    consumer: ConsumerResponse | None = Field(None, description="Consumer information")
+    sales_rep: UserResponse | None = Field(
+        None, description="Sales representative information"
+    )
+    last_message: str | None = Field(
+        None, description="Last message text in the session"
+    )

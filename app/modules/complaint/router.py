@@ -5,6 +5,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import get_current_user
 from app.core.constants import ErrorMessages
@@ -17,8 +18,9 @@ from app.modules.complaint.schema import (
     ComplaintResponse,
     ComplaintStatusUpdate,
 )
+from app.modules.consumer.model import Consumer
 from app.modules.order.model import Order
-from app.modules.supplier.model import SupplierStaff
+from app.modules.supplier.model import Supplier, SupplierStaff
 from app.modules.user.model import User
 from app.utils.helpers import get_consumer_by_user_id
 from app.utils.pagination import create_pagination_response
@@ -105,67 +107,198 @@ async def create_complaint(
             detail="Order does not belong to you",
         )
 
-    # Verify sales rep exists
-    result = await db.execute(
-        select(User).where(User.id == complaint_data.sales_rep_id)
-    )
-    sales_rep = result.scalar_one_or_none()
-    if not sales_rep:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Sales representative not found",
-        )
+    # Auto-assign sales rep and manager if not provided or if provided values are invalid
+    sales_rep_id = complaint_data.sales_rep_id
+    manager_id = complaint_data.manager_id
 
-    # Verify manager exists
-    result = await db.execute(select(User).where(User.id == complaint_data.manager_id))
-    manager = result.scalar_one_or_none()
-    if not manager:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Manager not found",
+    # Validate provided sales_rep_id if given
+    if sales_rep_id:
+        result = await db.execute(
+            select(User).where(User.id == sales_rep_id, User.is_active)
         )
+        sales_rep_user = result.scalar_one_or_none()
+        if not sales_rep_user:
+            sales_rep_id = None  # Invalid user, will auto-assign
+        else:
+            # Check if user is associated with supplier
+            result = await db.execute(
+                select(SupplierStaff).where(
+                    SupplierStaff.user_id == sales_rep_id,
+                    SupplierStaff.supplier_id == order.supplier_id,
+                )
+            )
+            if not result.scalar_one_or_none():
+                sales_rep_id = None  # Not associated with supplier, will auto-assign
 
-    # Check sales rep
-    result = await db.execute(
-        select(SupplierStaff).where(
-            SupplierStaff.user_id == complaint_data.sales_rep_id,
-            SupplierStaff.supplier_id == order.supplier_id,
+    # Validate provided manager_id if given
+    if manager_id:
+        result = await db.execute(
+            select(User).where(User.id == manager_id, User.is_active)
         )
-    )
-    sales_rep_staff = result.scalar_one_or_none()
-    if not sales_rep_staff:
+        manager_user = result.scalar_one_or_none()
+        if not manager_user:
+            manager_id = None  # Invalid user, will auto-assign
+        else:
+            # Check if user is associated with supplier (as staff or owner)
+            result = await db.execute(
+                select(SupplierStaff).where(
+                    SupplierStaff.user_id == manager_id,
+                    SupplierStaff.supplier_id == order.supplier_id,
+                )
+            )
+            if not result.scalar_one_or_none():
+                # Check if it's the supplier owner
+                result = await db.execute(
+                    select(Supplier).where(
+                        Supplier.id == order.supplier_id,
+                        Supplier.user_id == manager_id,
+                    )
+                )
+                if not result.scalar_one_or_none():
+                    manager_id = None  # Not associated with supplier, will auto-assign
+
+    if not sales_rep_id or not manager_id:
+        # Get supplier staff for auto-assignment
+        # First, try to get a sales rep (with active user)
+        if not sales_rep_id:
+            result = await db.execute(
+                select(SupplierStaff)
+                .join(User, SupplierStaff.user_id == User.id)
+                .where(SupplierStaff.supplier_id == order.supplier_id)
+                .where(SupplierStaff.staff_role.ilike("%sales%"))
+                .where(User.is_active)
+                .limit(1)
+            )
+            sales_rep_staff = result.scalar_one_or_none()
+            if sales_rep_staff:
+                sales_rep_id = sales_rep_staff.user_id
+            else:
+                # If no sales rep found, try to get any active staff member
+                result = await db.execute(
+                    select(SupplierStaff)
+                    .join(User, SupplierStaff.user_id == User.id)
+                    .where(SupplierStaff.supplier_id == order.supplier_id)
+                    .where(User.is_active)
+                    .limit(1)
+                )
+                sales_rep_staff = result.scalar_one_or_none()
+                if sales_rep_staff:
+                    sales_rep_id = sales_rep_staff.user_id
+
+        # Get a manager or owner
+        if not manager_id:
+            # Try to find staff with "manager" in their role (case-insensitive) with active user
+            result = await db.execute(
+                select(SupplierStaff)
+                .join(User, SupplierStaff.user_id == User.id)
+                .where(SupplierStaff.supplier_id == order.supplier_id)
+                .where(SupplierStaff.staff_role.ilike("%manager%"))
+                .where(User.is_active)
+                .limit(1)
+            )
+            manager_staff = result.scalar_one_or_none()
+            if manager_staff:
+                manager_id = manager_staff.user_id
+            else:
+                # If no manager found, try to get the supplier owner (with active user)
+                result = await db.execute(
+                    select(Supplier)
+                    .join(User, Supplier.user_id == User.id)
+                    .where(Supplier.id == order.supplier_id)
+                    .where(User.is_active)
+                )
+                supplier = result.scalar_one_or_none()
+                if supplier and supplier.user_id:
+                    manager_id = supplier.user_id
+
+    # Verify sales rep exists and is associated with supplier
+    if sales_rep_id:
+        result = await db.execute(select(User).where(User.id == sales_rep_id))
+        sales_rep = result.scalar_one_or_none()
+        if not sales_rep:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Sales representative not found",
+            )
+
+        result = await db.execute(
+            select(SupplierStaff).where(
+                SupplierStaff.user_id == sales_rep_id,
+                SupplierStaff.supplier_id == order.supplier_id,
+            )
+        )
+        sales_rep_staff = result.scalar_one_or_none()
+        if not sales_rep_staff:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Sales representative is not associated with the order's supplier",
+            )
+    else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Sales representative is not associated with the order's supplier",
+            detail="No sales representative found for this supplier. Please contact support.",
         )
 
-    # Check manager
-    result = await db.execute(
-        select(SupplierStaff).where(
-            SupplierStaff.user_id == complaint_data.manager_id,
-            SupplierStaff.supplier_id == order.supplier_id,
-            SupplierStaff.staff_role.in_(["manager", "owner"]),
+    # Verify manager exists and is associated with supplier
+    if manager_id:
+        result = await db.execute(select(User).where(User.id == manager_id))
+        manager = result.scalar_one_or_none()
+        if not manager:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Manager not found",
+            )
+
+        result = await db.execute(
+            select(SupplierStaff).where(
+                SupplierStaff.user_id == manager_id,
+                SupplierStaff.supplier_id == order.supplier_id,
+            )
         )
-    )
-    manager_staff = result.scalar_one_or_none()
-    if not manager_staff:
+        manager_staff = result.scalar_one_or_none()
+        if not manager_staff:
+            # Check if it's the supplier owner
+            result = await db.execute(
+                select(Supplier).where(
+                    Supplier.id == order.supplier_id,
+                    Supplier.user_id == manager_id,
+                )
+            )
+            supplier = result.scalar_one_or_none()
+            if not supplier:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Manager is not associated with the order's supplier",
+                )
+    else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Manager is not associated with the order's supplier or does not have manager/owner role",
+            detail="No manager found for this supplier. Please contact support.",
         )
 
     # Create complaint
     complaint = Complaint(
         order_id=complaint_data.order_id,
         consumer_id=consumer.id,
-        sales_rep_id=complaint_data.sales_rep_id,
-        manager_id=complaint_data.manager_id,
+        sales_rep_id=sales_rep_id,
+        manager_id=manager_id,
         status=ComplaintStatus.OPEN,
         description=complaint_data.description,
     )
     db.add(complaint)
     await db.commit()
-    await db.refresh(complaint)
+
+    # Reload complaint with all necessary relationships for response
+    result = await db.execute(
+        select(Complaint)
+        .options(
+            selectinload(Complaint.order).selectinload(Order.items),
+            selectinload(Complaint.order).selectinload(Order.supplier),
+            selectinload(Complaint.consumer).selectinload(Consumer.user),
+        )
+        .where(Complaint.id == complaint.id)
+    )
+    complaint = result.scalar_one()
 
     return ComplaintResponse.model_validate(complaint)
 
@@ -177,8 +310,16 @@ async def get_complaint(
     db: AsyncSession = Depends(get_db),
 ) -> ComplaintResponse:
     """Get a single complaint (consumer, sales rep, or manager only)."""
-    # Get complaint
-    result = await db.execute(select(Complaint).where(Complaint.id == complaint_id))
+    # Get complaint with relationships loaded
+    result = await db.execute(
+        select(Complaint)
+        .options(
+            selectinload(Complaint.order).selectinload(Order.items),
+            selectinload(Complaint.order).selectinload(Order.supplier),
+            selectinload(Complaint.consumer).selectinload(Consumer.user),
+        )
+        .where(Complaint.id == complaint_id)
+    )
     complaint = result.scalar_one_or_none()
     if not complaint:
         raise HTTPException(
@@ -273,9 +414,14 @@ async def get_complaints(
     count_result = await db.execute(count_query)
     total = count_result.scalar_one() or 0
 
-    # Get paginated results
+    # Get paginated results with relationships loaded
     query = (
-        query.order_by(Complaint.created_at.desc())
+        query.options(
+            selectinload(Complaint.order).selectinload(Order.items),
+            selectinload(Complaint.order).selectinload(Order.supplier),
+            selectinload(Complaint.consumer).selectinload(Consumer.user),
+        )
+        .order_by(Complaint.created_at.desc())
         .offset((page - 1) * size)
         .limit(size)
     )
@@ -349,7 +495,18 @@ async def update_complaint_status(
     if status_update.resolution:
         complaint.resolution = status_update.resolution
     await db.commit()
-    await db.refresh(complaint)
+
+    # Reload complaint with relationships
+    result = await db.execute(
+        select(Complaint)
+        .options(
+            selectinload(Complaint.order).selectinload(Order.items),
+            selectinload(Complaint.order).selectinload(Order.supplier),
+            selectinload(Complaint.consumer).selectinload(Consumer.user),
+        )
+        .where(Complaint.id == complaint_id)
+    )
+    complaint = result.scalar_one()
 
     return ComplaintResponse.model_validate(complaint)
 
@@ -410,7 +567,18 @@ async def submit_consumer_feedback(
     # Update feedback
     complaint.consumer_feedback = feedback.satisfied
     await db.commit()
-    await db.refresh(complaint)
+
+    # Reload complaint with relationships
+    result = await db.execute(
+        select(Complaint)
+        .options(
+            selectinload(Complaint.order).selectinload(Order.items),
+            selectinload(Complaint.order).selectinload(Order.supplier),
+            selectinload(Complaint.consumer).selectinload(Consumer.user),
+        )
+        .where(Complaint.id == complaint_id)
+    )
+    complaint = result.scalar_one()
 
     return ComplaintResponse.model_validate(complaint)
 
@@ -478,6 +646,17 @@ async def reopen_complaint(
     if complaint.consumer_feedback is False:
         complaint.consumer_feedback = None
     await db.commit()
-    await db.refresh(complaint)
+
+    # Reload complaint with relationships
+    result = await db.execute(
+        select(Complaint)
+        .options(
+            selectinload(Complaint.order).selectinload(Order.items),
+            selectinload(Complaint.order).selectinload(Order.supplier),
+            selectinload(Complaint.consumer).selectinload(Consumer.user),
+        )
+        .where(Complaint.id == complaint_id)
+    )
+    complaint = result.scalar_one()
 
     return ComplaintResponse.model_validate(complaint)

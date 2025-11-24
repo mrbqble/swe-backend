@@ -5,6 +5,8 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.modules.complaint.model import ComplaintStatus
+from app.modules.consumer.schema import ConsumerResponse
+from app.modules.order.schema import OrderResponse
 
 
 class ComplaintCreate(BaseModel):
@@ -23,8 +25,12 @@ class ComplaintCreate(BaseModel):
     )
 
     order_id: int = Field(..., description="Order ID")
-    sales_rep_id: int = Field(..., description="Sales representative user ID")
-    manager_id: int = Field(..., description="Manager user ID")
+    sales_rep_id: int | None = Field(
+        None, description="Sales representative user ID (auto-assigned if not provided)"
+    )
+    manager_id: int | None = Field(
+        None, description="Manager user ID (auto-assigned if not provided)"
+    )
     description: str = Field(
         ..., min_length=1, max_length=10000, description="Complaint description"
     )
@@ -100,3 +106,5 @@ class ComplaintResponse(BaseModel):
         description="Consumer feedback: true=satisfied, false=not satisfied, null=no feedback",
     )
     created_at: datetime
+    consumer: ConsumerResponse | None = Field(None, description="Consumer information")
+    order: OrderResponse | None = Field(None, description="Order information")

@@ -13,6 +13,7 @@ from app.api.dependencies import get_current_user
 from app.core.constants import ErrorMessages
 from app.core.roles import Role
 from app.db.session import get_db
+from app.modules.consumer.model import Consumer
 from app.modules.link.model import Link, LinkStatus
 from app.modules.link.schema import LinkRequestCreate, LinkResponse, LinkStatusUpdate
 from app.modules.supplier.model import Supplier, SupplierStaff
@@ -35,9 +36,12 @@ def _validate_status_transition(
     """Validate state machine transitions for link status."""
     valid_transitions = {
         LinkStatus.PENDING: {LinkStatus.ACCEPTED, LinkStatus.DENIED},
-        LinkStatus.ACCEPTED: {LinkStatus.BLOCKED},
+        LinkStatus.ACCEPTED: {
+            LinkStatus.BLOCKED,
+            LinkStatus.PENDING,
+        },  # Allow unlinking back to pending
         LinkStatus.DENIED: {LinkStatus.PENDING},
-        LinkStatus.BLOCKED: set[Any](),  # Blocked links cannot be changed
+        LinkStatus.BLOCKED: {LinkStatus.ACCEPTED},  # Allow unblocking back to accepted
     }
 
     allowed = valid_transitions.get(current_status, set[LinkStatus]())
@@ -120,10 +124,13 @@ async def create_link_request(
     await db.commit()
     await db.refresh(link)
 
-    # Reload link with supplier relationship for response convenience
+    # Reload link with supplier and consumer (with user) relationships for response convenience
     result = await db.execute(
         select(Link)
-        .options(selectinload(Link.supplier), selectinload(Link.consumer))
+        .options(
+            selectinload(Link.supplier),
+            selectinload(Link.consumer).selectinload(Consumer.user),
+        )
         .where(Link.id == link.id)
     )
     link = result.scalar_one()
@@ -138,15 +145,26 @@ async def update_link_status(
     current_user: Annotated[User, Depends(get_current_user)],
     db: AsyncSession = Depends(get_db),
 ) -> LinkResponse:
-    """Update link status (supplier owner/manager only)."""
-    # Check user is supplier owner or manager
+    """Update link status (supplier owner/manager/sales can approve/deny, owner/manager can block)."""
+    # Check user is supplier staff
     if current_user.role not in (
         Role.SUPPLIER_OWNER.value,
         Role.SUPPLIER_MANAGER.value,
+        Role.SUPPLIER_SALES.value,
     ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=ErrorMessages.NOT_ENOUGH_PERMISSIONS,
+        )
+
+    # Sales can only approve/deny pending requests, not block
+    if (
+        current_user.role == Role.SUPPLIER_SALES.value
+        and status_update.status == LinkStatus.BLOCKED
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Sales representatives cannot block links. Only owners and managers can block links.",
         )
 
     # Get link with supplier
@@ -161,9 +179,22 @@ async def update_link_status(
         )
 
     # Check user has permission for this supplier
-    has_permission = await is_supplier_owner_or_manager(
-        current_user, link.supplier_id, db
-    )
+    # For sales, we need to check if they're staff of this supplier
+    if current_user.role == Role.SUPPLIER_SALES.value:
+        result = await db.execute(
+            select(SupplierStaff).where(
+                SupplierStaff.user_id == current_user.id,
+                SupplierStaff.supplier_id == link.supplier_id,
+                SupplierStaff.staff_role == "sales",
+            )
+        )
+        staff = result.scalar_one_or_none()
+        has_permission = staff is not None
+    else:
+        has_permission = await is_supplier_owner_or_manager(
+            current_user, link.supplier_id, db
+        )
+
     if not has_permission:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -178,10 +209,13 @@ async def update_link_status(
     await db.commit()
     await db.refresh(link)
 
-    # Reload link with supplier and consumer for response
+    # Reload link with supplier and consumer (with user) for response
     result = await db.execute(
         select(Link)
-        .options(selectinload(Link.supplier), selectinload(Link.consumer))
+        .options(
+            selectinload(Link.supplier),
+            selectinload(Link.consumer).selectinload(Consumer.user),
+        )
         .where(Link.id == link_id)
     )
     link = result.scalar_one()
@@ -201,11 +235,12 @@ async def get_incoming_links(
     ),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """Get incoming link requests for supplier (owner/manager only)."""
-    # Check user is supplier owner or manager
+    """Get incoming link requests for supplier (owner/manager/sales can view)."""
+    # Check user is supplier staff
     if current_user.role not in (
         Role.SUPPLIER_OWNER.value,
         Role.SUPPLIER_MANAGER.value,
+        Role.SUPPLIER_SALES.value,
     ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -215,11 +250,11 @@ async def get_incoming_links(
     # Get supplier
     supplier = await get_supplier_by_user_id(current_user.id, db)
     if not supplier:
-        # Check if user is manager via SupplierStaff
+        # Check if user is staff (owner/manager/sales) via SupplierStaff
         result = await db.execute(
             select(SupplierStaff).where(
                 SupplierStaff.user_id == current_user.id,
-                SupplierStaff.staff_role.in_(["manager", "owner"]),
+                SupplierStaff.staff_role.in_(["manager", "owner", "sales"]),
             )
         )
         staff = result.scalar_one_or_none()
@@ -246,8 +281,11 @@ async def get_incoming_links(
 
     # Get paginated results
     query = query.order_by(Link.created_at.desc()).offset((page - 1) * size).limit(size)
-    # ensure supplier and consumer relationships are loaded
-    query = query.options(selectinload(Link.supplier), selectinload(Link.consumer))
+    # ensure supplier and consumer (with user) relationships are loaded
+    query = query.options(
+        selectinload(Link.supplier),
+        selectinload(Link.consumer).selectinload(Consumer.user),
+    )
     result = await db.execute(query)
     links = result.scalars().all()
 
@@ -263,10 +301,13 @@ async def get_link(
     db: AsyncSession = Depends(get_db),
 ) -> LinkResponse:
     """Get a single link (owner/manager or owning consumer)."""
-    # Get link with relationships
+    # Get link with relationships (including consumer.user)
     result = await db.execute(
         select(Link)
-        .options(selectinload(Link.consumer), selectinload(Link.supplier))
+        .options(
+            selectinload(Link.consumer).selectinload(Consumer.user),
+            selectinload(Link.supplier),
+        )
         .where(Link.id == link_id)
     )
     link = result.scalar_one_or_none()
@@ -339,7 +380,10 @@ async def get_consumer_links(
 
     # Get paginated results
     query = query.order_by(Link.created_at.desc()).offset((page - 1) * size).limit(size)
-    query = query.options(selectinload(Link.supplier), selectinload(Link.consumer))
+    query = query.options(
+        selectinload(Link.supplier),
+        selectinload(Link.consumer).selectinload(Consumer.user),
+    )
     result = await db.execute(query)
     links = result.scalars().all()
 

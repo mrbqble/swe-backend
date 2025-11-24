@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,7 +13,26 @@ from app.db.session import get_db
 from app.modules.user.model import User
 from app.utils.helpers import get_user_by_id
 
-_http_bearer = HTTPBearer()
+
+class HTTPBearer401(HTTPBearer):
+    """HTTPBearer that returns 401 instead of 403 for missing credentials."""
+
+    async def __call__(self, request: Request) -> HTTPAuthorizationCredentials:
+        """Override to return 401 for missing credentials instead of 403."""
+        try:
+            return await super().__call__(request)
+        except HTTPException as e:
+            # Convert 403 (Forbidden) to 401 (Unauthorized) for missing/invalid credentials
+            if e.status_code == status.HTTP_403_FORBIDDEN:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail=ErrorMessages.COULD_NOT_VALIDATE_CREDENTIALS,
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            raise
+
+
+_http_bearer = HTTPBearer401()
 
 
 async def get_current_user(

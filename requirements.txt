@@ -99,3 +99,16 @@ pre-commit==4.4.0
 
 # bandit - Security linter for Python code
 bandit[toml]==1.7.10
+
+# ==============================================================================
+# Testing Dependencies
+# ==============================================================================
+
+# pytest - Testing framework
+pytest==8.3.4
+
+# pytest-asyncio - Async support for pytest
+pytest-asyncio==0.24.0
+
+# httpx - HTTP client for testing (used by FastAPI TestClient)
+httpx==0.27.2

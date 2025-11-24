@@ -107,6 +107,12 @@ async def create_product(
         currency=product_data.currency,
         sku=product_data.sku,
         stock_qty=product_data.stock_qty,
+        unit=product_data.unit,
+        min_order_qty=product_data.min_order_qty,
+        discount_percent=product_data.discount_percent,
+        delivery_available=product_data.delivery_available,
+        pickup_available=product_data.pickup_available,
+        lead_time_days=product_data.lead_time_days,
         is_active=product_data.is_active,
     )
     db.add(product)

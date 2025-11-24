@@ -255,17 +255,19 @@ async def get_orders(
         consumer_id = consumer.id
         query = query.where(Order.consumer_id == consumer_id)
 
-    # Supplier owner/manager: get their supplier's orders
+    # Supplier staff (owner/manager/sales): get their supplier's orders
     elif current_user.role in (
         Role.SUPPLIER_OWNER.value,
         Role.SUPPLIER_MANAGER.value,
+        Role.SUPPLIER_SALES.value,
     ):
         supplier = await get_supplier_by_user_id(current_user.id, db)
         if not supplier:
+            # Check if user is staff (owner/manager/sales) via SupplierStaff
             result = await db.execute(
                 select(SupplierStaff).where(
                     SupplierStaff.user_id == current_user.id,
-                    SupplierStaff.staff_role.in_(["manager", "owner"]),
+                    SupplierStaff.staff_role.in_(["manager", "owner", "sales"]),
                 )
             )
             staff = result.scalar_one_or_none()
@@ -331,9 +333,11 @@ async def update_order_status(
             detail=ErrorMessages.NOT_ENOUGH_PERMISSIONS,
         )
 
-    # Get order with items
+    # Get order with items and products (for stock updates)
     result = await db.execute(
-        select(Order).options(selectinload(Order.items)).where(Order.id == order_id)
+        select(Order)
+        .options(selectinload(Order.items).selectinload(OrderItem.product))
+        .where(Order.id == order_id)
     )
     order = result.scalar_one_or_none()
     if not order:
@@ -354,6 +358,34 @@ async def update_order_status(
 
     # Validate state transition
     _validate_status_transition(order.status, status_update.status)
+
+    # Handle stock updates on accept/reject
+    if status_update.status == OrderStatus.ACCEPTED:
+        # Decrease stock when order is accepted
+        for item in order.items:
+            result = await db.execute(
+                select(Product).where(Product.id == item.product_id)
+            )
+            product = result.scalar_one_or_none()
+            if product:
+                if product.stock_qty < item.qty:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Insufficient stock for product {product.name}. Available: {product.stock_qty}, Required: {item.qty}",
+                    )
+                product.stock_qty -= item.qty
+    elif (
+        status_update.status == OrderStatus.REJECTED
+        and order.status == OrderStatus.ACCEPTED
+    ):
+        # Restore stock if rejecting an already accepted order
+        for item in order.items:
+            result = await db.execute(
+                select(Product).where(Product.id == item.product_id)
+            )
+            product = result.scalar_one_or_none()
+            if product:
+                product.stock_qty += item.qty
 
     # Update status
     order.status = status_update.status
