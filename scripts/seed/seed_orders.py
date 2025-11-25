@@ -37,6 +37,9 @@ async def seed_orders(
         "Tech Supplies Co.",
         "Global Merchandise Ltd.",
         "Premium Products Inc.",
+        "Industrial Equipment Solutions",
+        "Office Essentials Pro",
+        "Digital Devices Direct",
     ]
     for name in required_supplier_names:
         if name not in suppliers:
@@ -48,6 +51,9 @@ async def seed_orders(
         "Retail Chain ABC",
         "Wholesale Distributor XYZ",
         "Supermarket Network 123",
+        "Corporate Buyers Alliance",
+        "Retail Outlet Network",
+        "Bulk Purchase Consortium",
     ]
     for name in required_consumer_names:
         if name not in consumers:
@@ -55,12 +61,12 @@ async def seed_orders(
                 f"Required consumer {name} not found. Please run seed_consumers first."
             )
 
-    # If we already have 7 or more orders, assume seeding is done
-    if len(existing_orders) >= 7:
+    # If we already have 10 or more orders, assume seeding is done
+    if len(existing_orders) >= 10:
         print(
             f"⚠️  Orders already exist ({len(existing_orders)} orders), skipping seed_orders"
         )
-        return existing_orders[:7]  # Return first 7 for compatibility
+        return existing_orders[:10]  # Return first 10 for compatibility
 
     orders_data = [
         {
@@ -105,17 +111,35 @@ async def seed_orders(
             "status": OrderStatus.REJECTED,
             "total_kzt": Decimal("250000.00"),
         },
+        {
+            "supplier": suppliers["Industrial Equipment Solutions"],
+            "consumer": consumers["Corporate Buyers Alliance"],
+            "status": OrderStatus.ACCEPTED,
+            "total_kzt": Decimal("850000.00"),
+        },
+        {
+            "supplier": suppliers["Office Essentials Pro"],
+            "consumer": consumers["Retail Outlet Network"],
+            "status": OrderStatus.IN_PROGRESS,
+            "total_kzt": Decimal("320000.00"),
+        },
+        {
+            "supplier": suppliers["Digital Devices Direct"],
+            "consumer": consumers["Bulk Purchase Consortium"],
+            "status": OrderStatus.COMPLETED,
+            "total_kzt": Decimal("680000.00"),
+        },
     ]
 
-    # If we have existing orders, use them (up to 7)
+    # If we have existing orders, use them (up to 10)
     orders = (
-        existing_orders[:7] if len(existing_orders) >= 7 else existing_orders.copy()
+        existing_orders[:10] if len(existing_orders) >= 10 else existing_orders.copy()
     )
     created_count = 0
 
     # Create missing orders
     for order_data in orders_data:
-        if len(orders) >= 7:
+        if len(orders) >= 10:
             break  # We have enough orders
 
         supplier = order_data["supplier"]
@@ -144,7 +168,7 @@ async def seed_orders(
     else:
         print(f"✅ All required orders already exist ({len(orders)} orders)")
 
-    return orders[:7]  # Return exactly 7 orders for compatibility
+    return orders[:10]  # Return exactly 10 orders for compatibility
 
 
 if __name__ == "__main__":

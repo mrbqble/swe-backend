@@ -37,6 +37,11 @@ async def seed_supplier_staff(
         "manager2@example.com",
         "sales2@example.com",
         "sales3@example.com",
+        "manager3@example.com",
+        "sales4@example.com",
+        "manager4@example.com",
+        "sales5@example.com",
+        "manager5@example.com",
     ]
     for email in required_user_emails:
         if email not in users:
@@ -48,6 +53,9 @@ async def seed_supplier_staff(
         "Tech Supplies Co.",
         "Global Merchandise Ltd.",
         "Premium Products Inc.",
+        "Industrial Equipment Solutions",
+        "Office Essentials Pro",
+        "Digital Devices Direct",
     ]
     for name in required_supplier_names:
         if name not in suppliers:
@@ -85,6 +93,36 @@ async def seed_supplier_staff(
             "user": users["sales3@example.com"],
             "supplier": suppliers["Premium Products Inc."],
             "staff_role": "Sales Representative",
+        },
+        # Manager for Industrial Equipment Solutions
+        {
+            "user": users["manager3@example.com"],
+            "supplier": suppliers["Industrial Equipment Solutions"],
+            "staff_role": "Operations Manager",
+        },
+        # Sales rep for Office Essentials Pro
+        {
+            "user": users["sales4@example.com"],
+            "supplier": suppliers["Office Essentials Pro"],
+            "staff_role": "Sales Representative",
+        },
+        # Manager for Industrial Equipment Solutions
+        {
+            "user": users["manager4@example.com"],
+            "supplier": suppliers["Industrial Equipment Solutions"],
+            "staff_role": "Sales Manager",
+        },
+        # Sales rep for Office Essentials Pro
+        {
+            "user": users["sales5@example.com"],
+            "supplier": suppliers["Office Essentials Pro"],
+            "staff_role": "Senior Sales Representative",
+        },
+        # Manager for Digital Devices Direct
+        {
+            "user": users["manager5@example.com"],
+            "supplier": suppliers["Digital Devices Direct"],
+            "staff_role": "Operations Manager",
         },
     ]
 

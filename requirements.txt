@@ -1,114 +1,14 @@
-# ==============================================================================
-# requirements.txt - Python Dependencies
-# ==============================================================================
-# This file lists all Python package dependencies for the B2B Supplier-Wholesale
-# Exchange Platform Backend.
-#
-# Installation:
-#   pip install -r requirements.txt
-#
-# For production deployments, you may want to install only production
-# dependencies. Development dependencies (linting, etc.) are marked
-# with comments below.
-#
-# Best Practices:
-#   - Versions are pinned for reproducibility
-#   - Dependencies are organized by category
-#   - Comments explain the purpose of each dependency
-# ==============================================================================
-
-# ==============================================================================
-# Core Application Dependencies (Production)
-# ==============================================================================
-
-# FastAPI - Modern, fast web framework for building APIs
 fastapi==0.121.2
-
-# Uvicorn - ASGI server for running FastAPI applications
-# [standard] includes additional performance dependencies
 uvicorn[standard]==0.38.0
-
-# ==============================================================================
-# Database & ORM
-# ==============================================================================
-
-# SQLAlchemy - SQL toolkit and ORM
-# [asyncio] enables async database operations
 sqlalchemy[asyncio]==2.0.44
-
-# AsyncPG - Fast PostgreSQL async driver
 asyncpg==0.30.0
-
-# Alembic - Database migration tool for SQLAlchemy
 alembic==1.17.2
-
-# ==============================================================================
-# Data Validation & Settings
-# ==============================================================================
-
-# Pydantic - Data validation using Python type annotations
-# Note: pydantic-settings depends on pydantic, but we list it explicitly
-# since it's used directly in the codebase
 pydantic[email]>=2.0.0,<3.0.0
-
-# Pydantic Settings - Settings management using Pydantic
 pydantic-settings==2.12.0
-
-# ==============================================================================
-# Authentication & Security
-# ==============================================================================
-
-# PyJWT - JSON Web Token implementation
 pyjwt==2.10.1
-
-# bcrypt - Password hashing library
 bcrypt==5.0.0
-
-# slowapi - Rate limiting for FastAPI
 slowapi==0.1.9
-
-# ==============================================================================
-# Configuration & Environment
-# ==============================================================================
-
-# python-dotenv - Load environment variables from .env files
 python-dotenv==1.2.1
-
-# ==============================================================================
-# Development Dependencies
-# ==============================================================================
-# The following packages are only needed for development and
-# code quality checks. They are not required for production runtime.
-
-# ==============================================================================
-# Code Quality & Linting
-# ==============================================================================
-
-# Ruff - Fast Python linter and formatter (replaces black, flake8, isort)
-ruff==0.14.5
-
-# mypy - Static type checker for Python
-mypy==1.18.2
-
-# pre-commit - Git hooks framework for running checks before commits
-pre-commit==4.4.0
-
-# ==============================================================================
-# Security Scanning
-# ==============================================================================
-
-# bandit - Security linter for Python code
-bandit[toml]==1.7.10
-
-# ==============================================================================
-# Testing Dependencies
-# ==============================================================================
-
-# pytest - Testing framework
 pytest==8.3.4
-
-# pytest-asyncio - Async support for pytest
 pytest-asyncio==0.24.0
-
-# httpx - HTTP client for testing (used by FastAPI TestClient)
 httpx==0.27.2

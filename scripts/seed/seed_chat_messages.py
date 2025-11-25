@@ -31,9 +31,9 @@ async def seed_chat_messages(
     existing_messages = result.scalars().all()
 
     # Validate required data exists
-    if len(chat_sessions) < 7:
+    if len(chat_sessions) < 10:
         raise ValueError(
-            f"Need at least 7 chat sessions, but only {len(chat_sessions)} found. Please run seed_chat_sessions first."
+            f"Need at least 10 chat sessions, but only {len(chat_sessions)} found. Please run seed_chat_sessions first."
         )
 
     required_user_emails = [
@@ -41,9 +41,15 @@ async def seed_chat_messages(
         "consumer2@example.com",
         "consumer3@example.com",
         "consumer4@example.com",
+        "consumer5@example.com",
+        "consumer6@example.com",
+        "consumer7@example.com",
         "sales1@example.com",
         "sales2@example.com",
         "sales3@example.com",
+        "sales4@example.com",
+        "sales5@example.com",
+        "sales6@example.com",
     ]
     for email in required_user_emails:
         if email not in users:
@@ -52,7 +58,7 @@ async def seed_chat_messages(
             )
 
     # If we already have many messages, assume seeding is done
-    if len(existing_messages) >= 17:  # We create 17 messages
+    if len(existing_messages) >= 24:  # We create 24 messages
         print(
             f"⚠️  Chat messages already exist ({len(existing_messages)} messages), skipping seed_chat_messages"
         )
@@ -194,19 +200,64 @@ async def seed_chat_messages(
             "file_url": None,
             "created_at": base_time + timedelta(days=2, hours=9, minutes=8),
         },
+        # Messages for session 7 (Corporate Buyers Alliance - sales4 - accepted order)
+        {
+            "session": chat_sessions[7],
+            "sender": users["sales4@example.com"],
+            "text": "Your order has been accepted and is being processed.",
+            "file_url": None,
+            "created_at": base_time + timedelta(days=1, hours=11),
+        },
+        {
+            "session": chat_sessions[7],
+            "sender": users["consumer5@example.com"],
+            "text": "Thank you! When can we expect delivery?",
+            "file_url": None,
+            "created_at": base_time + timedelta(days=1, hours=11, minutes=5),
+        },
+        # Messages for session 8 (Retail Outlet Network - sales5 - in progress order)
+        {
+            "session": chat_sessions[8],
+            "sender": users["consumer6@example.com"],
+            "text": "Can you provide an update on our order status?",
+            "file_url": None,
+            "created_at": base_time + timedelta(days=1, hours=15),
+        },
+        {
+            "session": chat_sessions[8],
+            "sender": users["sales5@example.com"],
+            "text": "Your order is currently in progress. We'll notify you once it ships.",
+            "file_url": None,
+            "created_at": base_time + timedelta(days=1, hours=15, minutes=10),
+        },
+        # Messages for session 9 (Bulk Purchase Consortium - sales6 - completed order)
+        {
+            "session": chat_sessions[9],
+            "sender": users["sales6@example.com"],
+            "text": "Your order has been completed and is ready for pickup.",
+            "file_url": None,
+            "created_at": base_time + timedelta(days=2, hours=10),
+        },
+        {
+            "session": chat_sessions[9],
+            "sender": users["consumer7@example.com"],
+            "text": "Perfect! We'll arrange pickup tomorrow.",
+            "file_url": None,
+            "created_at": base_time + timedelta(days=2, hours=10, minutes=15),
+        },
     ]
 
-    # If we have existing messages, use them (up to 17)
+    # If we have existing messages, use them (up to 24)
     messages = (
-        existing_messages[:17]
-        if len(existing_messages) >= 17
+        existing_messages[:24]
+        if len(existing_messages) >= 24
         else existing_messages.copy()
     )
     created_count = 0
 
     # Create missing chat messages
     for message_data in messages_data:
-        if len(messages) >= 17:
+        if len(messages) >= 24:
             break  # We have enough messages
 
         chat_session = message_data["session"]
@@ -235,7 +286,7 @@ async def seed_chat_messages(
     else:
         print(f"✅ All required chat messages already exist ({len(messages)} messages)")
 
-    return messages[:17]  # Return exactly 17 messages for compatibility
+    return messages[:24]  # Return exactly 24 messages for compatibility
 
 
 if __name__ == "__main__":

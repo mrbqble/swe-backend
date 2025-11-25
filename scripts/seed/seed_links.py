@@ -39,6 +39,7 @@ async def seed_links(
         "Wholesale Distributor XYZ",
         "Supermarket Network 123",
         "Department Store Group",
+        "Corporate Buyers Alliance",
     ]
     for name in required_consumer_names:
         if name not in consumers:
@@ -50,6 +51,7 @@ async def seed_links(
         "Tech Supplies Co.",
         "Global Merchandise Ltd.",
         "Premium Products Inc.",
+        "Industrial Equipment Solutions",
     ]
     for name in required_supplier_names:
         if name not in suppliers:
@@ -106,6 +108,11 @@ async def seed_links(
             "consumer": consumers["Department Store Group"],
             "supplier": suppliers["Global Merchandise Ltd."],
             "status": LinkStatus.BLOCKED,
+        },
+        {
+            "consumer": consumers["Corporate Buyers Alliance"],
+            "supplier": suppliers["Industrial Equipment Solutions"],
+            "status": LinkStatus.ACCEPTED,
         },
     ]
 

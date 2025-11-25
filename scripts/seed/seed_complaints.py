@@ -40,7 +40,14 @@ async def seed_complaints(
             f"Need at least 7 orders, but only {len(orders)} found. Please run seed_orders first."
         )
 
-    required_consumer_names = ["Retail Chain ABC", "Wholesale Distributor XYZ"]
+    required_consumer_names = [
+        "Retail Chain ABC",
+        "Wholesale Distributor XYZ",
+        "Supermarket Network 123",
+        "Corporate Buyers Alliance",
+        "Retail Outlet Network",
+        "Bulk Purchase Consortium",
+    ]
     for name in required_consumer_names:
         if name not in consumers:
             raise ValueError(
@@ -51,8 +58,14 @@ async def seed_complaints(
         "sales1@example.com",
         "sales2@example.com",
         "sales3@example.com",
+        "sales4@example.com",
+        "sales5@example.com",
+        "sales6@example.com",
         "manager1@example.com",
         "manager2@example.com",
+        "manager3@example.com",
+        "manager4@example.com",
+        "manager5@example.com",
     ]
     for email in required_user_emails:
         if email not in users:
@@ -60,12 +73,12 @@ async def seed_complaints(
                 f"Required user {email} not found. Please run seed_users first."
             )
 
-    # If we already have 4 or more complaints, assume seeding is done
-    if len(existing_complaints) >= 4:
+    # If we already have 10 or more complaints, assume seeding is done
+    if len(existing_complaints) >= 10:
         print(
             f"⚠️  Complaints already exist ({len(existing_complaints)} complaints), skipping seed_complaints"
         )
-        return existing_complaints[:4]  # Return first 4 for compatibility
+        return existing_complaints[:10]  # Return first 10 for compatibility
 
     complaints_data = [
         {
@@ -104,19 +117,73 @@ async def seed_complaints(
             "description": "Order was rejected without proper explanation. Need clarification on rejection reason.",
             "resolution": None,
         },
+        {
+            "order": orders[1],  # Accepted order
+            "consumer": consumers["Retail Chain ABC"],
+            "sales_rep": users["sales1@example.com"],
+            "manager": users["manager1@example.com"],
+            "status": ComplaintStatus.OPEN,
+            "description": "Delivery date was changed without notification. Need explanation.",
+            "resolution": None,
+        },
+        {
+            "order": orders[4],  # Accepted order
+            "consumer": consumers["Supermarket Network 123"],
+            "sales_rep": users["sales2@example.com"],
+            "manager": users["manager2@example.com"],
+            "status": ComplaintStatus.ESCALATED,
+            "description": "Product quality does not match description. Requesting refund.",
+            "resolution": None,
+        },
+        {
+            "order": orders[5],  # Completed order
+            "consumer": consumers["Wholesale Distributor XYZ"],
+            "sales_rep": users["sales3@example.com"],
+            "manager": users["manager1@example.com"],
+            "status": ComplaintStatus.RESOLVED,
+            "description": "Missing items in the shipment. Partial delivery received.",
+            "resolution": "Missing items shipped separately. Customer confirmed receipt.",
+        },
+        {
+            "order": orders[7],  # Accepted order
+            "consumer": consumers["Corporate Buyers Alliance"],
+            "sales_rep": users["sales4@example.com"],
+            "manager": users["manager3@example.com"],
+            "status": ComplaintStatus.OPEN,
+            "description": "Invoice amount does not match order total. Need correction.",
+            "resolution": None,
+        },
+        {
+            "order": orders[8],  # In Progress order
+            "consumer": consumers["Retail Outlet Network"],
+            "sales_rep": users["sales5@example.com"],
+            "manager": users["manager4@example.com"],
+            "status": ComplaintStatus.ESCALATED,
+            "description": "Delayed shipment affecting business operations. Urgent resolution needed.",
+            "resolution": None,
+        },
+        {
+            "order": orders[9],  # Completed order
+            "consumer": consumers["Bulk Purchase Consortium"],
+            "sales_rep": users["sales6@example.com"],
+            "manager": users["manager5@example.com"],
+            "status": ComplaintStatus.RESOLVED,
+            "description": "Packaging was damaged but products were intact. Requesting better packaging for future orders.",
+            "resolution": "Improved packaging standards implemented. Customer satisfied with resolution.",
+        },
     ]
 
-    # If we have existing complaints, use them (up to 4)
+    # If we have existing complaints, use them (up to 10)
     complaints = (
-        existing_complaints[:4]
-        if len(existing_complaints) >= 4
+        existing_complaints[:10]
+        if len(existing_complaints) >= 10
         else existing_complaints.copy()
     )
     created_count = 0
 
     # Create missing complaints
     for complaint_data in complaints_data:
-        if len(complaints) >= 4:
+        if len(complaints) >= 10:
             break  # We have enough complaints
 
         order = complaint_data["order"]
@@ -154,7 +221,7 @@ async def seed_complaints(
             f"✅ All required complaints already exist ({len(complaints)} complaints)"
         )
 
-    return complaints[:4]  # Return exactly 4 complaints for compatibility
+    return complaints[:10]  # Return exactly 10 complaints for compatibility
 
 
 if __name__ == "__main__":

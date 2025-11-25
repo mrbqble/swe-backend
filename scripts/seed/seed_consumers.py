@@ -35,6 +35,12 @@ async def seed_consumers(
         "consumer2@example.com",
         "consumer3@example.com",
         "consumer4@example.com",
+        "consumer5@example.com",
+        "consumer6@example.com",
+        "consumer7@example.com",
+        "consumer8@example.com",
+        "consumer9@example.com",
+        "consumer10@example.com",
     ]
     consumer_users: list[User] = []
     for email in required_emails:
@@ -62,6 +68,30 @@ async def seed_consumers(
         {
             "user": consumer_users[3],
             "organization_name": "Department Store Group",
+        },
+        {
+            "user": consumer_users[4],
+            "organization_name": "Corporate Buyers Alliance",
+        },
+        {
+            "user": consumer_users[5],
+            "organization_name": "Retail Outlet Network",
+        },
+        {
+            "user": consumer_users[6],
+            "organization_name": "Bulk Purchase Consortium",
+        },
+        {
+            "user": consumer_users[7],
+            "organization_name": "Commercial Supply Chain",
+        },
+        {
+            "user": consumer_users[8],
+            "organization_name": "Enterprise Procurement Group",
+        },
+        {
+            "user": consumer_users[9],
+            "organization_name": "Wholesale Marketplace",
         },
     ]
 

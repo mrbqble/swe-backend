@@ -2,16 +2,6 @@
 
 A production-ready FastAPI backend for a B2B supplier-wholesale exchange platform. This system enables suppliers to manage their catalogs, consumers to browse and order products, and provides comprehensive features for link management, order processing, chat communication, complaint handling, and notifications.
 
-## 📖 Documentation
-
-- **[Submission Guide](docs/SUBMISSION_GUIDE.md)** - Step-by-step guide for instructors to run and evaluate the API
-- **[Module Documentation](docs/MODULES.md)** - Comprehensive overview of each module (purpose, endpoints, data models)
-- **[Report Guide](docs/REPORT_GUIDE.md)** - Guide for generating report materials, screenshots, and documentation
-- **[Frontend Handover Guide](docs/FRONTEND_HANDOVER.md)** - Complete integration guide for frontend teams with cURL examples and end-to-end flows
-- **[Security Guide](docs/SECURITY.md)** - Security best practices, configuration, and database user requirements
-- **[Postman Collection](docs/postman_collection.json)** - Importable API collection for Postman/Insomnia with all endpoints
-- **[OpenAPI Schema](docs/openapi.json)** - Exported OpenAPI 3.0 schema (run `make export-openapi` to update)
-
 ## 🚀 Features
 
 ### Authentication & Authorization
@@ -72,7 +62,6 @@ A production-ready FastAPI backend for a B2B supplier-wholesale exchange platfor
 - **Database:** PostgreSQL with async SQLAlchemy 2.x
 - **Migrations:** Alembic
 - **Validation:** Pydantic v2
-- **Code Quality:** Ruff (linter/formatter), mypy (type checking), pre-commit hooks
 - **Authentication:** JWT tokens, bcrypt password hashing
 
 ## 📋 Prerequisites
@@ -80,29 +69,10 @@ A production-ready FastAPI backend for a B2B supplier-wholesale exchange platfor
 - Python 3.13.5 or higher
 - PostgreSQL database (running locally or via Docker)
 - pip (Python package manager)
-- Make (optional, for convenience commands - Windows users can use WSL, Git Bash, or manual commands)
 
 ## 🏃 Quick Start (Fresh Start in ≤10 Minutes)
 
 Get the API running locally from scratch:
-
-### Option 1: Using Make (Recommended for Linux/Mac/WSL)
-
-```bash
-# 1. Create virtual environment and install dependencies
-make install
-
-# 2. Setup environment file
-make setup-env
-
-# 3. Run database migrations
-make upgrade
-
-# 4. Start development server
-make dev
-```
-
-**Note:** On Windows (without WSL), use the manual commands below or Git Bash.
 
 ### Option 2: Manual Setup
 
@@ -151,10 +121,7 @@ python -m alembic upgrade head
 python -m uvicorn app.main:app --reload
 ```
 
-**Server:** http://localhost:8000
-**API Docs:** http://localhost:8000/docs
-**ReDoc:** http://localhost:8000/redoc
-
+**Server:** http://localhost:8000 **API Docs:** http://localhost:8000/docs **ReDoc:** http://localhost:8000/redoc
 
 ## 🐳 Docker
 
@@ -214,7 +181,6 @@ docker compose exec app alembic upgrade head
 # Create new migration
 docker compose exec app alembic revision --autogenerate -m "description"
 ```
-
 
 ## 📚 API Endpoints
 
@@ -283,44 +249,18 @@ All endpoints are prefixed with `/api/v1`.
 
 ## 🛠 Development Commands
 
-### Using Make (Recommended)
-
-```bash
-make help              # Show all available commands
-make dev               # Run development server
-make lint              # Run linter
-make format            # Format code
-make type-check        # Run type checker
-make check             # Run all checks (lint, format, type-check)
-make upgrade           # Apply database migrations
-make migrate MESSAGE="description"  # Create new migration
-make clean             # Clean cache and build files
-```
-
-### Manual Commands
+### Commands
 
 ```bash
 # Development server (hot reload)
 python -m uvicorn app.main:app --reload
 
-# Run linter
-python -m ruff check app
-
-# Format code
-python -m ruff format app
-
-# Type checking
-python -m mypy app
 
 # Create migration
 python -m alembic revision --autogenerate -m "description"
-# Or using Make:
-make migrate MESSAGE="description"
 
 # Apply migrations
 python -m alembic upgrade head
-# Or using Make:
-make upgrade
 
 # Rollback migration
 python -m alembic downgrade -1
@@ -405,7 +345,6 @@ swe-backend/
 - **CORS Configuration**: Configurable allowed origins
 - **Rate Limiting**: Configurable per endpoint (default: 100/min, 10/min for auth)
 - **API Docs Protection**: Disabled in production by default
-- **Security Linting**: Bandit integration for vulnerability scanning
 
 See [Security Documentation](docs/SECURITY.md) for detailed security guidelines and database user requirements.
 
@@ -467,9 +406,8 @@ The system includes 12 core domain models:
 
 ## 🤝 Contributing
 
-1. Follow the existing code style (enforced by Ruff)
-2. Run type checking with mypy
-3. Follow the API versioning and error response standards
+1. Follow the existing code style
+2. Follow the API versioning and error response standards
 
 ## 📄 License
 

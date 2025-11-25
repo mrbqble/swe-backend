@@ -3,7 +3,7 @@
 # scripts.ps1 - PowerShell Development Scripts
 # ==============================================================================
 # This script provides convenient commands for common development tasks,
-# similar to npm scripts or Makefile targets.
+# similar to npm scripts.
 #
 # Usage:
 #   .\scripts.ps1 <command> [parameters]
@@ -18,7 +18,6 @@
 #   .\scripts.ps1                    # (no command also shows help)
 #
 # Note: This script is designed for Windows PowerShell. For Linux/Mac,
-#       use the Makefile instead.
 # ==============================================================================
 
 <#
@@ -42,7 +41,7 @@
 
 .EXAMPLE
     .\scripts.ps1 install
-    Installs all dependencies and sets up pre-commit hooks
+    Installs all dependencies
 
 .EXAMPLE
     .\scripts.ps1 migrate -MESSAGE "Add users table"
@@ -104,7 +103,6 @@ switch ($Command.ToLower()) {
 
     "install-dev" {
         Invoke-CommandSafe "[*] Installing dependencies..." "pip install -r requirements.txt"
-        Invoke-CommandSafe "[*] Setting up pre-commit hooks..." "pre-commit install"
         Write-Host "[OK] Development environment ready!" -ForegroundColor Green
     }
 
@@ -138,100 +136,6 @@ switch ($Command.ToLower()) {
         uvicorn app.main:app --host 0.0.0.0 --port 8000
     }
 
-    # ==========================================================================
-    # Code Quality
-    # ==========================================================================
-
-    "format" {
-        Invoke-CommandSafe "[*] Formatting code..." "ruff format app"
-    }
-
-    "format-check" {
-        Invoke-CommandSafe "[*] Checking code formatting..." "ruff format --check app"
-    }
-
-    "lint" {
-        Invoke-CommandSafe "[*] Running linter..." "ruff check app"
-    }
-
-    "lint-fix" {
-        Invoke-CommandSafe "[*] Running linter and fixing issues..." "ruff check --fix app"
-    }
-
-    "type-check" {
-        Invoke-CommandSafe "[*] Running type checker..." "mypy app"
-    }
-
-    "security" {
-        Write-Host "[*] Running security linting..." -ForegroundColor Cyan
-        bandit -r app -f json -o bandit-report.json
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "[WARNING] Security issues found. See bandit-report.json for details." -ForegroundColor Yellow
-        }
-        bandit -r app -ll
-        Write-Host "[OK] Security check complete! See bandit-report.json for details." -ForegroundColor Green
-    }
-
-    "check" {
-        Write-Host "[*] Running all checks..." -ForegroundColor Green
-        Write-Host ""
-
-        $failed = $false
-
-
-        # Lint
-        Write-Host "1. Running linter..." -ForegroundColor Cyan
-        ruff check app
-        if ($LASTEXITCODE -ne 0) { $failed = $true }
-
-        # Lint fix
-        Write-Host "2. Running linter and fixing issues..." -ForegroundColor Cyan
-        ruff check --fix app
-        if ($LASTEXITCODE -ne 0) { $failed = $true }
-
-        # Format check
-        Write-Host "3. Checking code formatting..." -ForegroundColor Cyan
-        ruff format --check app
-        if ($LASTEXITCODE -ne 0) { $failed = $true }
-
-        # Format
-        Write-Host "4. Formatting code..." -ForegroundColor Cyan
-        ruff format app
-        if ($LASTEXITCODE -ne 0) { $failed = $true }
-
-        # Type check
-        Write-Host "5. Running type checker..." -ForegroundColor Cyan
-        mypy app
-        if ($LASTEXITCODE -ne 0) { $failed = $true }
-
-        # Security check
-        Write-Host "6. Running security linting..." -ForegroundColor Cyan
-        bandit -r app -ll
-        if ($LASTEXITCODE -ne 0) { $failed = $true }
-
-        if ($failed) {
-            Write-Host ""
-            Write-Host "[ERROR] Some checks failed. Please fix the issues above." -ForegroundColor Red
-            exit 1
-        }
-        else {
-            Write-Host ""
-            Write-Host "[OK] All checks passed!" -ForegroundColor Green
-        }
-    }
-
-    "pre-commit-run" {
-        Invoke-CommandSafe "[*] Running pre-commit hooks..." "pre-commit run --all-files"
-    }
-
-    "pre-commit-update" {
-        Invoke-CommandSafe "[*] Updating pre-commit hooks..." "pre-commit autoupdate"
-    }
-
-    "export-openapi" {
-        Write-Host "[*] Exporting OpenAPI schema..." -ForegroundColor Cyan
-        python scripts/export_openapi.py --url http://localhost:8000 --output docs/openapi.json
-    }
 
     # ==========================================================================
     # Database Migrations
@@ -312,8 +216,8 @@ switch ($Command.ToLower()) {
         Get-ChildItem -Path . -Include __pycache__,*.pyc -Recurse -Force -ErrorAction SilentlyContinue |
             Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 
-        # Remove type checking cache
-        $cacheDirs = @(".mypy_cache", ".ruff_cache", "build", "dist")
+        # Remove build cache
+        $cacheDirs = @("build", "dist")
         foreach ($dir in $cacheDirs) {
             if (Test-Path $dir) {
                 Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue
@@ -356,29 +260,13 @@ switch ($Command.ToLower()) {
 
         Write-Host "[*] Setup & Installation:" -ForegroundColor Yellow
         Write-Host "  .\scripts.ps1 install          Install production dependencies" -ForegroundColor White
-        Write-Host "  .\scripts.ps1 install-dev      Install dependencies + setup pre-commit" -ForegroundColor White
+        Write-Host "  .\scripts.ps1 install-dev      Install dependencies" -ForegroundColor White
         Write-Host "  .\scripts.ps1 setup-env        Create .env file from env.example" -ForegroundColor White
         Write-Host ""
 
         Write-Host "[*] Development:" -ForegroundColor Yellow
         Write-Host "  .\scripts.ps1 dev              Run development server (hot reload)" -ForegroundColor White
         Write-Host "  .\scripts.ps1 start            Run production server" -ForegroundColor White
-        Write-Host ""
-
-
-        Write-Host "[*] Code Quality:" -ForegroundColor Yellow
-        Write-Host "  .\scripts.ps1 format            Format code with ruff" -ForegroundColor White
-        Write-Host "  .\scripts.ps1 format-check      Check if code is formatted" -ForegroundColor White
-        Write-Host "  .\scripts.ps1 lint              Run linter (ruff check)" -ForegroundColor White
-        Write-Host "  .\scripts.ps1 lint-fix         Run linter and fix issues" -ForegroundColor White
-        Write-Host "  .\scripts.ps1 type-check       Run type checker (mypy)" -ForegroundColor White
-        Write-Host "  .\scripts.ps1 security         Run security linting (bandit)" -ForegroundColor White
-        Write-Host "  .\scripts.ps1 check            Run all checks (format, lint, type, security)" -ForegroundColor White
-        Write-Host "  .\scripts.ps1 pre-commit-run    Run pre-commit hooks on all files" -ForegroundColor White
-        Write-Host "  .\scripts.ps1 pre-commit-update  Update pre-commit hooks" -ForegroundColor White
-        Write-Host ""
-        Write-Host "[*] Documentation:" -ForegroundColor Yellow
-        Write-Host "  .\scripts.ps1 export-openapi   Export OpenAPI schema to docs/openapi.json" -ForegroundColor White
         Write-Host ""
 
         Write-Host "[*] Database:" -ForegroundColor Yellow

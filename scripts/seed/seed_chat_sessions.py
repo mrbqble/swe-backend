@@ -40,6 +40,9 @@ async def seed_chat_sessions(
         "Wholesale Distributor XYZ",
         "Supermarket Network 123",
         "Department Store Group",
+        "Corporate Buyers Alliance",
+        "Retail Outlet Network",
+        "Bulk Purchase Consortium",
     ]
     for name in required_consumer_names:
         if name not in consumers:
@@ -51,6 +54,9 @@ async def seed_chat_sessions(
         "sales1@example.com",
         "sales2@example.com",
         "sales3@example.com",
+        "sales4@example.com",
+        "sales5@example.com",
+        "sales6@example.com",
     ]
     for email in required_user_emails:
         if email not in users:
@@ -58,17 +64,17 @@ async def seed_chat_sessions(
                 f"Required user {email} not found. Please run seed_users first."
             )
 
-    if len(orders) < 7:
+    if len(orders) < 10:
         raise ValueError(
-            f"Need at least 7 orders, but only {len(orders)} found. Please run seed_orders first."
+            f"Need at least 10 orders, but only {len(orders)} found. Please run seed_orders first."
         )
 
-    # If we already have 7 or more sessions, assume seeding is done
-    if len(existing_sessions) >= 7:
+    # If we already have 10 or more sessions, assume seeding is done
+    if len(existing_sessions) >= 10:
         print(
             f"⚠️  Chat sessions already exist ({len(existing_sessions)} sessions), skipping seed_chat_sessions"
         )
-        return existing_sessions[:7]  # Return first 7 for compatibility
+        return existing_sessions[:10]  # Return first 10 for compatibility
 
     sessions_data = [
         # Chat sessions with orders
@@ -108,19 +114,34 @@ async def seed_chat_sessions(
             "sales_rep": users["sales1@example.com"],
             "order": None,
         },
+        {
+            "consumer": consumers["Corporate Buyers Alliance"],
+            "sales_rep": users["sales4@example.com"],
+            "order": orders[7],  # Accepted order
+        },
+        {
+            "consumer": consumers["Retail Outlet Network"],
+            "sales_rep": users["sales5@example.com"],
+            "order": orders[8],  # In Progress order
+        },
+        {
+            "consumer": consumers["Bulk Purchase Consortium"],
+            "sales_rep": users["sales6@example.com"],
+            "order": orders[9],  # Completed order
+        },
     ]
 
-    # If we have existing sessions, use them (up to 7)
+    # If we have existing sessions, use them (up to 10)
     sessions = (
-        existing_sessions[:7]
-        if len(existing_sessions) >= 7
+        existing_sessions[:10]
+        if len(existing_sessions) >= 10
         else existing_sessions.copy()
     )
     created_count = 0
 
     # Create missing chat sessions
     for session_data in sessions_data:
-        if len(sessions) >= 7:
+        if len(sessions) >= 10:
             break  # We have enough sessions
 
         consumer = session_data["consumer"]
@@ -153,7 +174,7 @@ async def seed_chat_sessions(
     else:
         print(f"✅ All required chat sessions already exist ({len(sessions)} sessions)")
 
-    return sessions[:7]  # Return exactly 7 sessions for compatibility
+    return sessions[:10]  # Return exactly 10 sessions for compatibility
 
 
 if __name__ == "__main__":

@@ -31,9 +31,9 @@ async def seed_order_items(
     existing_items = result.scalars().all()
 
     # Validate we have enough orders and products
-    if len(orders) < 7:
+    if len(orders) < 10:
         raise ValueError(
-            f"Need at least 7 orders, but only {len(orders)} found. Please run seed_orders first."
+            f"Need at least 10 orders, but only {len(orders)} found. Please run seed_orders first."
         )
 
     required_product_names = [
@@ -55,7 +55,7 @@ async def seed_order_items(
             )
 
     # If we already have many order items, assume seeding is done
-    if len(existing_items) >= 17:  # We create 17 order items
+    if len(existing_items) >= 24:  # We create 24 order items
         print(
             f"⚠️  Order items already exist ({len(existing_items)} items), skipping seed_order_items"
         )
@@ -69,6 +69,9 @@ async def seed_order_items(
     # Order 4: Accepted order from Supermarket Network 123 to Global Merchandise Ltd.
     # Order 5: Completed order from Wholesale Distributor XYZ to Premium Products Inc.
     # Order 6: Rejected order from Wholesale Distributor XYZ to Premium Products Inc.
+    # Order 7: Accepted order from Corporate Buyers Alliance to Industrial Equipment Solutions
+    # Order 8: In Progress order from Retail Outlet Network to Office Essentials Pro
+    # Order 9: Completed order from Bulk Purchase Consortium to Digital Devices Direct
 
     order_items_data = [
         # Order 0: Pending order
@@ -186,17 +189,62 @@ async def seed_order_items(
             "qty": 1,
             "unit_price_kzt": Decimal("250000.00"),
         },
+        # Order 7: Accepted order
+        {
+            "order": orders[7],
+            "product": products["Laptop Computer"],
+            "qty": 1,
+            "unit_price_kzt": Decimal("450000.00"),
+        },
+        {
+            "order": orders[7],
+            "product": products["Mechanical Keyboard"],
+            "qty": 3,
+            "unit_price_kzt": Decimal("35000.00"),
+        },
+        {
+            "order": orders[7],
+            "product": products["USB-C Hub"],
+            "qty": 2,
+            "unit_price_kzt": Decimal("25000.00"),
+        },
+        # Order 8: In Progress order
+        {
+            "order": orders[8],
+            "product": products["Office Chair"],
+            "qty": 2,
+            "unit_price_kzt": Decimal("75000.00"),
+        },
+        {
+            "order": orders[8],
+            "product": products["Desk Lamp"],
+            "qty": 4,
+            "unit_price_kzt": Decimal("12000.00"),
+        },
+        # Order 9: Completed order
+        {
+            "order": orders[9],
+            "product": products["Monitor Stand"],
+            "qty": 3,
+            "unit_price_kzt": Decimal("45000.00"),
+        },
+        {
+            "order": orders[9],
+            "product": products["Noise-Cancelling Headphones"],
+            "qty": 5,
+            "unit_price_kzt": Decimal("95000.00"),
+        },
     ]
 
-    # If we have existing items, use them (up to 17)
+    # If we have existing items, use them (up to 24)
     order_items = (
-        existing_items[:17] if len(existing_items) >= 17 else existing_items.copy()
+        existing_items[:24] if len(existing_items) >= 24 else existing_items.copy()
     )
     created_count = 0
 
     # Create missing order items
     for item_data in order_items_data:
-        if len(order_items) >= 17:
+        if len(order_items) >= 24:
             break  # We have enough items
 
         order = item_data["order"]
@@ -222,7 +270,7 @@ async def seed_order_items(
     else:
         print(f"✅ All required order items already exist ({len(order_items)} items)")
 
-    return order_items[:17]  # Return exactly 17 items for compatibility
+    return order_items[:24]  # Return exactly 24 items for compatibility
 
 
 if __name__ == "__main__":
