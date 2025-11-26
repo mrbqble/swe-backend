@@ -20,7 +20,10 @@ class HTTPBearer401(HTTPBearer):
     async def __call__(self, request: Request) -> HTTPAuthorizationCredentials:
         """Override to return 401 for missing credentials instead of 403."""
         try:
-            return await super().__call__(request)
+            credentials = await super().__call__(request)
+            if credentials is None:
+                raise ApplicationError("Could not validate credentials")
+            return credentials
         except HTTPException as e:
             # Convert 403 (Forbidden) to 401 (Unauthorized) for missing/invalid credentials
             if e.status_code == status.HTTP_403_FORBIDDEN:

@@ -26,7 +26,8 @@ class ProductCreate(BaseModel):
 
     name: str = Field(..., max_length=255, description="Product name")
     description: str | None = Field(None, description="Product description")
-    price_kzt: Decimal = Field(..., ge=0, decimal_places=2, description="Price in KZT")
+    price_kzt: Decimal = Field(..., ge=0, decimal_places=2,
+                               description="Price in KZT")
 
     @field_validator("price_kzt", mode="before")
     @classmethod
@@ -36,8 +37,8 @@ class ProductCreate(BaseModel):
             return v
         if isinstance(v, str):
             return Decimal(v)
-        if isinstance(v, (int, float)):
-            return Decimal(str(v))
+        if isinstance(v, (int | float)):
+            return Decimal(v)
         raise ValueError(f"Cannot convert {type(v).__name__} to Decimal")
 
     currency: str = Field(
@@ -84,7 +85,8 @@ class ProductCreate(BaseModel):
     lead_time_days: int | None = Field(
         None, ge=0, description="Lead time in days for delivery/pickup"
     )
-    is_active: bool = Field(default=True, description="Whether product is active")
+    is_active: bool = Field(
+        default=True, description="Whether product is active")
 
 
 class ProductUpdate(BaseModel):
@@ -133,7 +135,8 @@ class ProductUpdate(BaseModel):
     unit: str | None = Field(
         None, max_length=50, description="Unit of measurement (e.g., pcs, kg, m)"
     )
-    min_order_qty: int | None = Field(None, ge=1, description="Minimum order quantity")
+    min_order_qty: int | None = Field(
+        None, ge=1, description="Minimum order quantity")
     discount_percent: Decimal | None = Field(
         None, ge=0, le=100, decimal_places=2, description="Discount percentage (0-100)"
     )
@@ -163,7 +166,8 @@ class ProductUpdate(BaseModel):
     lead_time_days: int | None = Field(
         None, ge=0, description="Lead time in days for delivery/pickup"
     )
-    is_active: bool | None = Field(None, description="Whether product is active")
+    is_active: bool | None = Field(
+        None, description="Whether product is active")
 
 
 class ProductResponse(BaseModel):
@@ -197,10 +201,14 @@ class ProductResponse(BaseModel):
     sku: str = Field(..., description="Stock keeping unit")
     stock_qty: int = Field(..., description="Stock quantity")
     unit: str | None = Field(None, description="Unit of measurement")
-    min_order_qty: int | None = Field(None, description="Minimum order quantity")
-    discount_percent: Decimal | None = Field(None, description="Discount percentage")
-    delivery_available: bool = Field(..., description="Whether delivery is available")
-    pickup_available: bool = Field(..., description="Whether pickup is available")
+    min_order_qty: int | None = Field(
+        None, description="Minimum order quantity")
+    discount_percent: Decimal | None = Field(
+        None, description="Discount percentage")
+    delivery_available: bool = Field(...,
+                                     description="Whether delivery is available")
+    pickup_available: bool = Field(...,
+                                   description="Whether pickup is available")
     lead_time_days: int | None = Field(None, description="Lead time in days")
     is_active: bool = Field(..., description="Whether product is active")
     created_at: datetime = Field(..., description="Creation timestamp")

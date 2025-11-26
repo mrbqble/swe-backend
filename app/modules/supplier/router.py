@@ -1,7 +1,9 @@
 """Supplier routes."""
 
-from fastapi import APIRouter, Depends, status
+from typing import Any
+from fastapi import APIRouter, Depends
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import get_current_user
@@ -18,7 +20,7 @@ SupplierRouter = APIRouter(prefix="/suppliers", tags=["suppliers"])
 @SupplierRouter.get("/me", response_model=SupplierResponse)
 async def get_my_supplier(
     current_user: User = Depends(get_current_user),
-    db=Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get current authenticated supplier's profile."""
     if current_user.role != Role.SUPPLIER_OWNER:
@@ -42,11 +44,12 @@ async def get_my_supplier(
 async def update_my_supplier(
     supplier_data: SupplierUpdate,
     current_user: User = Depends(get_current_user),
-    db=Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """Update current authenticated supplier's profile."""
     if current_user.role != Role.SUPPLIER_OWNER:
-        raise ApplicationError("Only supplier owners can update supplier profile")
+        raise ApplicationError(
+            "Only supplier owners can update supplier profile")
 
     stmt = select(Supplier).where(Supplier.user_id == current_user.id)
     result = await db.execute(stmt)
@@ -69,11 +72,12 @@ async def update_my_supplier(
 @SupplierRouter.patch("/me/deactivate")
 async def deactivate_my_supplier(
     current_user: User = Depends(get_current_user),
-    db=Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """Deactivate current authenticated supplier's account."""
     if current_user.role != Role.SUPPLIER_OWNER:
-        raise ApplicationError("Only supplier owners can deactivate supplier account")
+        raise ApplicationError(
+            "Only supplier owners can deactivate supplier account")
 
     stmt = select(Supplier).where(Supplier.user_id == current_user.id)
     result = await db.execute(stmt)
@@ -91,11 +95,12 @@ async def deactivate_my_supplier(
 @SupplierRouter.delete("/me")
 async def delete_my_supplier(
     current_user: User = Depends(get_current_user),
-    db=Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """Delete current authenticated supplier's account."""
     if current_user.role != Role.SUPPLIER_OWNER:
-        raise ApplicationError("Only supplier owners can delete supplier account")
+        raise ApplicationError(
+            "Only supplier owners can delete supplier account")
 
     stmt = select(Supplier).where(Supplier.user_id == current_user.id)
     result = await db.execute(stmt)
@@ -110,14 +115,15 @@ async def delete_my_supplier(
     return {"message": "Supplier account deleted successfully"}
 
 
-@SupplierRouter.get("/staff", response_model=list[dict])
+@SupplierRouter.get("/staff", response_model=list[dict[str, Any]])
 async def get_supplier_staff(
     current_user: User = Depends(get_current_user),
-    db=Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get all staff members for current supplier."""
     if current_user.role not in [Role.SUPPLIER_OWNER, Role.SUPPLIER_MANAGER]:
-        raise ApplicationError("Only supplier owners and managers can view staff")
+        raise ApplicationError(
+            "Only supplier owners and managers can view staff")
 
     # Get supplier for current user
     stmt = select(Supplier).where(Supplier.user_id == current_user.id)
@@ -130,7 +136,7 @@ async def get_supplier_staff(
             select(SupplierStaff)
             .where(SupplierStaff.user_id == current_user.id)
             .options(selectinload(SupplierStaff.supplier))
-)
+        )
         result = await db.execute(stmt)
         staff_record = result.scalar_one_or_none()
         if staff_record:
@@ -164,9 +170,9 @@ async def get_supplier_staff(
 
 @SupplierRouter.post("/staff")
 async def create_supplier_staff(
-    _staff_data: dict,
+    _staff_data: dict[str, Any],
     current_user: User = Depends(get_current_user),
-    db=Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """Create a new staff member for current supplier."""
     if current_user.role != Role.SUPPLIER_OWNER:
@@ -192,7 +198,7 @@ async def create_supplier_staff(
 async def delete_supplier_staff(
     staff_id: int,
     current_user: User = Depends(get_current_user),
-    db=Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """Delete a staff member from current supplier."""
     if current_user.role != Role.SUPPLIER_OWNER:
@@ -227,11 +233,12 @@ async def delete_supplier_staff(
 async def deactivate_supplier_staff(
     staff_id: int,
     current_user: User = Depends(get_current_user),
-    db=Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     """Deactivate a staff member."""
     if current_user.role != Role.SUPPLIER_OWNER:
-        raise ApplicationError("Only supplier owners can deactivate staff members")
+        raise ApplicationError(
+            "Only supplier owners can deactivate staff members")
 
     # Get supplier for current user
     stmt = select(Supplier).where(Supplier.user_id == current_user.id)
@@ -247,7 +254,7 @@ async def deactivate_supplier_staff(
         .where(
             SupplierStaff.id == staff_id,
             SupplierStaff.supplier_id == supplier.id,
-)
+        )
         .options(selectinload(SupplierStaff.user))
     )
     result = await db.execute(stmt)

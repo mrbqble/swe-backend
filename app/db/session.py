@@ -3,8 +3,10 @@
 import logging
 import time
 from collections.abc import AsyncGenerator
+from typing import Any
 
 from sqlalchemy import event
+from sqlalchemy.engine import Connection, ExecutionContext
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.config import settings
@@ -22,8 +24,13 @@ engine = create_async_engine(
 # Note: We listen to the sync_engine which is the underlying synchronous engine
 @event.listens_for(engine.sync_engine, "before_cursor_execute", retval=True)
 def receive_before_cursor_execute(
-    conn, _cursor, statement, parameters, _context, _executemany
-):
+    conn: Connection,
+    _cursor: Any,  # DBAPI cursor type varies by database driver
+    statement: str,
+    parameters: Any,  # Can be tuple, dict, or list depending on database
+    _context: ExecutionContext | None,
+    _executemany: bool,
+) -> tuple[str, Any]:
     """Log slow queries before execution."""
     conn.info.setdefault("query_start_time", []).append(time.time())
     return statement, parameters
@@ -31,8 +38,13 @@ def receive_before_cursor_execute(
 
 @event.listens_for(engine.sync_engine, "after_cursor_execute")
 def receive_after_cursor_execute(
-    conn, _cursor, statement, _parameters, _context, _executemany
-):
+    conn: Connection,
+    _cursor: Any,  # DBAPI cursor type varies by database driver
+    statement: str,
+    _parameters: Any,  # Can be tuple, dict, or list depending on database
+    _context: ExecutionContext | None,
+    _executemany: bool,
+) -> None:
     """Log slow queries after execution."""
     if conn.info.get("query_start_time"):
         total = time.time() - conn.info["query_start_time"].pop(-1)

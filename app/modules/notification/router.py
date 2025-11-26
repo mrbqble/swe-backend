@@ -2,7 +2,7 @@
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,7 +28,8 @@ async def get_notifications(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Get notifications for the current user."""
-    query = select(Notification).where(Notification.recipient_id == current_user.id)
+    query = select(Notification).where(
+        Notification.recipient_id == current_user.id)
 
     # Apply read status filter
     if is_read is not None:
@@ -79,12 +80,12 @@ async def mark_notification_read(
     notification = result.scalar_one_or_none()
     if not notification:
         raise ApplicationError("Notification not found",
-)
+                               )
 
     # Check if user is the recipient
     if notification.recipient_id != current_user.id:
         raise ApplicationError("You do not have permission to modify this notification",
-)
+                               )
 
     # Mark as read
     notification.is_read = True

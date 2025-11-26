@@ -225,7 +225,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             )
 
         # Preserve headers from HTTPException (e.g., WWW-Authenticate for 401)
-        headers = {}
+        headers: dict[str, str] = {}
         if hasattr(exc, "headers") and exc.headers:
             headers.update(exc.headers)
 
