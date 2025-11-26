@@ -39,7 +39,7 @@ def _validate_status_transition(
         OrderStatus.PENDING: {OrderStatus.ACCEPTED, OrderStatus.REJECTED},
         OrderStatus.ACCEPTED: {OrderStatus.IN_PROGRESS},
         OrderStatus.IN_PROGRESS: {OrderStatus.COMPLETED},
-        OrderStatus.REJECTED: set[Any](),  # Rejected orders cannot be changed
+        OrderStatus.REJECTED: {OrderStatus.ACCEPTED},  # Allow accepting rejected orders again
         # Completed orders cannot be changed
         OrderStatus.COMPLETED: set[Any](),
     }
