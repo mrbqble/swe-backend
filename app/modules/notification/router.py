@@ -54,11 +54,24 @@ async def get_notifications(
     result = await db.execute(query)
     notifications = result.scalars().all()
 
-    # Create response
-    notification_responses = [
-        NotificationResponse.model_validate(notification)
-        for notification in notifications
-    ]
+    # Create response - manually map notification_metadata to metadata
+    notification_responses: list[NotificationResponse] = []
+    for notification in notifications:
+        # Create a dict with metadata mapped from notification_metadata
+        notification_dict = {
+            "id": notification.id,
+            "recipient_id": notification.recipient_id,
+            "type": notification.type,
+            "message": notification.message,
+            "entity_id": notification.entity_id,
+            "entity_type": notification.entity_type,
+            # Map notification_metadata to metadata
+            "metadata": notification.notification_metadata,
+            "is_read": notification.is_read,
+            "created_at": notification.created_at,
+        }
+        notification_responses.append(
+            NotificationResponse.model_validate(notification_dict))
     return create_pagination_response(
         notification_responses, page, size, total
     ).model_dump()
@@ -92,4 +105,44 @@ async def mark_notification_read(
     await db.commit()
     await db.refresh(notification)
 
-    return NotificationResponse.model_validate(notification)
+    # Manually map notification_metadata to metadata for response
+    notification_dict = {
+        "id": notification.id,
+        "recipient_id": notification.recipient_id,
+        "type": notification.type,
+        "message": notification.message,
+        "entity_id": notification.entity_id,
+        "entity_type": notification.entity_type,
+        # Map notification_metadata to metadata
+        "metadata": notification.notification_metadata,
+        "is_read": notification.is_read,
+        "created_at": notification.created_at,
+    }
+    return NotificationResponse.model_validate(notification_dict)
+
+
+@NotificationRouter.patch(
+    "/read-all", response_model=dict
+)
+async def mark_all_notifications_read(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Mark all notifications as read for the current user."""
+    # Update all unread notifications for the current user
+    result = await db.execute(
+        select(Notification).where(
+            Notification.recipient_id == current_user.id,
+            Notification.is_read == False
+        )
+    )
+    unread_notifications = result.scalars().all()
+
+    count = 0
+    for notification in unread_notifications:
+        notification.is_read = True
+        count += 1
+
+    await db.commit()
+
+    return {"message": f"Marked {count} notifications as read", "count": count}

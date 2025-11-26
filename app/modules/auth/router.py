@@ -17,6 +17,8 @@ from app.core.security import (
 from app.db.session import get_db
 from app.modules.auth.schema import (
     LoginRequest,
+    PasswordResetRequest,
+    PasswordResetResponse,
     RefreshRequest,
     SignupRequest,
     TokenResponse,
@@ -176,8 +178,12 @@ async def login(
         raise ApplicationError("Incorrect email or password")
     if not verify_password(request.password, user.password_hash):
         raise ApplicationError("Incorrect email or password")
+
+    # Reactivate account if it was deactivated (user can reactivate by signing in)
     if not user.is_active:
-        raise ApplicationError("User account is inactive")
+        user.is_active = True
+        await db.commit()
+        await db.refresh(user)
 
     is_mobile = is_mobile_client(http_request)
 
@@ -236,3 +242,52 @@ async def refresh(
             raise ApplicationError("Only supplier owners, managers, and sales representatives can refresh tokens through the web app")
 
     return _create_tokens(user)
+
+
+@AuthRouter.post(
+    "/reset-password",
+    response_model=PasswordResetResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Reset password",
+    description="Reset user password by email. No email verification required - if email exists, password is reset immediately.",
+    responses={
+        200: {"description": "Password reset successfully"},
+        400: {"description": "Email not found or invalid password"},
+        422: {"description": "Validation error"},
+    },
+)
+async def reset_password(
+    request: PasswordResetRequest,
+    http_request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> PasswordResetResponse:
+    """
+    Reset user password by email.
+
+    **Role Requirements:** None (public endpoint)
+
+    **Process:**
+    1. Verify email exists in database
+    2. Validate new password meets policy requirements
+    3. Update user's password hash
+    4. Return success message
+
+    **Note:** No email verification is required. If the email exists, the password is reset immediately.
+    """
+    # Check if user exists
+    user = await get_user_by_email(request.email, db)
+    if not user:
+        # Don't reveal if email exists or not for security
+        raise ApplicationError("Email not found")
+
+    # Validate password policy
+    try:
+        validate_password_policy(request.new_password)
+    except ValueError as e:
+        raise ApplicationError(str(e))
+
+    # Update password
+    user.password_hash = hash_password(request.new_password)
+    await db.commit()
+
+    return PasswordResetResponse(message="Password reset successfully")

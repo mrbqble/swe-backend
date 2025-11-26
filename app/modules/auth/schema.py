@@ -76,6 +76,43 @@ class RefreshRequest(BaseModel):
     refresh_token: str = Field(..., description="Refresh token")
 
 
+class PasswordResetRequest(BaseModel):
+    """Password reset request schema."""
+
+    model_config = ConfigDict(
+        strict=True,
+        json_schema_extra={
+            "example": {
+                "email": "user@example.com",
+                "new_password": "NewSecurePass123",
+            }
+        },
+    )
+
+    email: EmailStr = Field(..., description="User email address")
+    new_password: str = Field(
+        ...,
+        min_length=8,
+        max_length=128,
+        description="New password (min 8 chars, must contain uppercase, lowercase, and digit)",
+    )
+
+
+class PasswordResetResponse(BaseModel):
+    """Password reset response schema."""
+
+    model_config = ConfigDict(
+        strict=True,
+        json_schema_extra={
+            "example": {
+                "message": "Password reset successfully",
+            }
+        },
+    )
+
+    message: str = Field(..., description="Success message")
+
+
 class TokenResponse(BaseModel):
     """Token response schema."""
 

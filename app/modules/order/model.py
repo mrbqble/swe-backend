@@ -80,9 +80,6 @@ class Order(Base):
     items: Mapped[list[OrderItem]] = relationship(
         "OrderItem", back_populates="order", cascade="all, delete-orphan"
     )
-    chat_sessions: Mapped[list[ChatSession]] = relationship(
-        "ChatSession", back_populates="order"
-    )
     complaints: Mapped[list[Complaint]] = relationship(
         "Complaint", back_populates="order"
     )

@@ -169,12 +169,19 @@ switch ($Command.ToLower()) {
     }
 
     "db-reset" {
-        Write-Host "[!] WARNING: This will drop all tables and recreate them!" -ForegroundColor Red
+        Write-Host "[!] WARNING: This will drop ALL database objects (tables, indexes, sequences, types, etc.)!" -ForegroundColor Red
         $response = Read-Host "Are you sure you want to reset the database? (y/N)"
         if ($response -eq "y" -or $response -eq "Y") {
-            Invoke-CommandSafe "[*] Dropping all tables..." "alembic downgrade base"
+            Invoke-CommandSafe "[*] Dropping all database objects..." "python -m scripts.drop_all"
             Invoke-CommandSafe "[*] Recreating database schema..." "alembic upgrade head"
             Write-Host "[OK] Database reset complete" -ForegroundColor Green
+            $seedResponse = Read-Host "Do you want to seed the database with sample data? (Y/n)"
+            if ($seedResponse -eq "" -or $seedResponse -eq "y" -or $seedResponse -eq "Y") {
+                Invoke-CommandSafe "[*] Seeding database..." "python -m scripts.seed.seed_all"
+                Write-Host "[OK] Database seeding complete" -ForegroundColor Green
+            } else {
+                Write-Host "[*] Database seeding skipped" -ForegroundColor Yellow
+            }
         } else {
             Write-Host "[*] Database reset cancelled" -ForegroundColor Yellow
         }

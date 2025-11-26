@@ -7,7 +7,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.chat.model import ChatMessage, ChatSession
+from app.modules.consumer.model import Consumer
 from app.modules.user.model import User
+from app.utils.helpers import create_notification
 
 
 async def seed_chat_messages(
@@ -31,9 +33,9 @@ async def seed_chat_messages(
     existing_messages = result.scalars().all()
 
     # Validate required data exists
-    if len(chat_sessions) < 10:
+    if len(chat_sessions) < 1:
         raise ValueError(
-            f"Need at least 10 chat sessions, but only {len(chat_sessions)} found. Please run seed_chat_sessions first."
+            f"Need at least 1 chat session, but only {len(chat_sessions)} found. Chat sessions are created automatically when links are accepted."
         )
 
     required_user_emails = [
@@ -57,8 +59,31 @@ async def seed_chat_messages(
                 f"Required user {email} not found. Please run seed_users first."
             )
 
+    # Build a map of session_id -> (consumer_user, sales_rep_user)
+    session_users: dict[int, tuple[User, User]] = {}
+    for chat_session in chat_sessions:
+        # Get consumer and its user
+        consumer_result = await session.execute(
+            select(Consumer).where(Consumer.id == chat_session.consumer_id)
+        )
+        consumer = consumer_result.scalar_one()
+
+        # Get consumer user
+        consumer_user_result = await session.execute(
+            select(User).where(User.id == consumer.user_id)
+        )
+        consumer_user = consumer_user_result.scalar_one()
+
+        # Get sales rep user
+        sales_rep_user_result = await session.execute(
+            select(User).where(User.id == chat_session.sales_rep_id)
+        )
+        sales_rep_user = sales_rep_user_result.scalar_one()
+
+        session_users[chat_session.id] = (consumer_user, sales_rep_user)
+
     # If we already have many messages, assume seeding is done
-    if len(existing_messages) >= 24:  # We create 24 messages
+    if len(existing_messages) >= len(chat_sessions) * 4:  # ~4 messages per session
         print(
             f"⚠️  Chat messages already exist ({len(existing_messages)} messages), skipping seed_chat_messages"
         )
@@ -66,234 +91,128 @@ async def seed_chat_messages(
 
     base_time = datetime.now(UTC) - timedelta(days=2)
 
-    messages_data = [
-        # Messages for session 0 (Retail Chain ABC - sales1 - pending order)
-        {
-            "session": chat_sessions[0],
-            "sender": users["consumer1@example.com"],
-            "text": "Hello, I have a question about the laptop order.",
-            "file_url": None,
-            "created_at": base_time + timedelta(hours=1),
-        },
-        {
-            "session": chat_sessions[0],
-            "sender": users["sales1@example.com"],
-            "text": "Hi! I'd be happy to help. What would you like to know?",
-            "file_url": None,
-            "created_at": base_time + timedelta(hours=1, minutes=5),
-        },
-        {
-            "session": chat_sessions[0],
-            "sender": users["consumer1@example.com"],
-            "text": "When can I expect delivery?",
-            "file_url": None,
-            "created_at": base_time + timedelta(hours=1, minutes=10),
-        },
-        {
-            "session": chat_sessions[0],
-            "sender": users["sales1@example.com"],
-            "text": "The order is currently pending approval. Once approved, delivery will take 3-5 business days.",
-            "file_url": None,
-            "created_at": base_time + timedelta(hours=1, minutes=15),
-        },
-        # Messages for session 1 (Retail Chain ABC - sales1 - accepted order)
-        {
-            "session": chat_sessions[1],
-            "sender": users["sales1@example.com"],
-            "text": "Your order has been accepted! We're processing it now.",
-            "file_url": None,
-            "created_at": base_time + timedelta(hours=2),
-        },
-        {
-            "session": chat_sessions[1],
-            "sender": users["consumer1@example.com"],
-            "text": "Great! Thank you for the update.",
-            "file_url": None,
-            "created_at": base_time + timedelta(hours=2, minutes=10),
-        },
-        # Messages for session 2 (Wholesale Distributor XYZ - sales1 - in progress order)
-        {
-            "session": chat_sessions[2],
-            "sender": users["consumer2@example.com"],
-            "text": "Can I add more items to my current order?",
-            "file_url": None,
-            "created_at": base_time + timedelta(hours=3),
-        },
-        {
-            "session": chat_sessions[2],
-            "sender": users["sales1@example.com"],
-            "text": "I'm sorry, but your order is already in progress. You'll need to place a new order for additional items.",
-            "file_url": None,
-            "created_at": base_time + timedelta(hours=3, minutes=8),
-        },
-        # Messages for session 3 (Retail Chain ABC - sales2 - completed order)
-        {
-            "session": chat_sessions[3],
-            "sender": users["sales2@example.com"],
-            "text": "Your order has been completed and shipped!",
-            "file_url": None,
-            "created_at": base_time + timedelta(days=1, hours=10),
-        },
-        {
-            "session": chat_sessions[3],
-            "sender": users["consumer1@example.com"],
-            "text": "Excellent! Can you provide the tracking number?",
-            "file_url": None,
-            "created_at": base_time + timedelta(days=1, hours=10, minutes=5),
-        },
-        {
-            "session": chat_sessions[3],
-            "sender": users["sales2@example.com"],
-            "text": "Tracking number: TRK123456789. You can track it on our website.",
-            "file_url": None,
-            "created_at": base_time + timedelta(days=1, hours=10, minutes=7),
-        },
-        # Messages for session 4 (Supermarket Network 123 - sales2 - accepted order)
-        {
-            "session": chat_sessions[4],
-            "sender": users["consumer3@example.com"],
-            "text": "I need to modify the quantity of office chairs.",
-            "file_url": None,
-            "created_at": base_time + timedelta(days=1, hours=14),
-        },
-        {
-            "session": chat_sessions[4],
-            "sender": users["sales2@example.com"],
-            "text": "I can help with that. How many chairs would you like?",
-            "file_url": None,
-            "created_at": base_time + timedelta(days=1, hours=14, minutes=3),
-        },
-        # Messages for session 5 (Wholesale Distributor XYZ - sales3 - no order)
-        {
-            "session": chat_sessions[5],
-            "sender": users["consumer2@example.com"],
-            "text": "Hello, I'm interested in your product catalog.",
-            "file_url": None,
-            "created_at": base_time + timedelta(days=1, hours=16),
-        },
-        {
-            "session": chat_sessions[5],
-            "sender": users["sales3@example.com"],
-            "text": "Hello! I'd be happy to send you our latest catalog. Let me prepare that for you.",
-            "file_url": None,
-            "created_at": base_time + timedelta(days=1, hours=16, minutes=5),
-        },
-        {
-            "session": chat_sessions[5],
-            "sender": users["sales3@example.com"],
-            "text": "Here's our catalog:",
-            "file_url": "https://example.com/catalog.pdf",
-            "created_at": base_time + timedelta(days=1, hours=16, minutes=10),
-        },
-        # Messages for session 6 (Department Store Group - sales1 - no order)
-        {
-            "session": chat_sessions[6],
-            "sender": users["consumer4@example.com"],
-            "text": "What are your bulk pricing options?",
-            "file_url": None,
-            "created_at": base_time + timedelta(days=2, hours=9),
-        },
-        {
-            "session": chat_sessions[6],
-            "sender": users["sales1@example.com"],
-            "text": "We offer volume discounts for orders over 10 units. Would you like me to send you our pricing sheet?",
-            "file_url": None,
-            "created_at": base_time + timedelta(days=2, hours=9, minutes=8),
-        },
-        # Messages for session 7 (Corporate Buyers Alliance - sales4 - accepted order)
-        {
-            "session": chat_sessions[7],
-            "sender": users["sales4@example.com"],
-            "text": "Your order has been accepted and is being processed.",
-            "file_url": None,
-            "created_at": base_time + timedelta(days=1, hours=11),
-        },
-        {
-            "session": chat_sessions[7],
-            "sender": users["consumer5@example.com"],
-            "text": "Thank you! When can we expect delivery?",
-            "file_url": None,
-            "created_at": base_time + timedelta(days=1, hours=11, minutes=5),
-        },
-        # Messages for session 8 (Retail Outlet Network - sales5 - in progress order)
-        {
-            "session": chat_sessions[8],
-            "sender": users["consumer6@example.com"],
-            "text": "Can you provide an update on our order status?",
-            "file_url": None,
-            "created_at": base_time + timedelta(days=1, hours=15),
-        },
-        {
-            "session": chat_sessions[8],
-            "sender": users["sales5@example.com"],
-            "text": "Your order is currently in progress. We'll notify you once it ships.",
-            "file_url": None,
-            "created_at": base_time + timedelta(days=1, hours=15, minutes=10),
-        },
-        # Messages for session 9 (Bulk Purchase Consortium - sales6 - completed order)
-        {
-            "session": chat_sessions[9],
-            "sender": users["sales6@example.com"],
-            "text": "Your order has been completed and is ready for pickup.",
-            "file_url": None,
-            "created_at": base_time + timedelta(days=2, hours=10),
-        },
-        {
-            "session": chat_sessions[9],
-            "sender": users["consumer7@example.com"],
-            "text": "Perfect! We'll arrange pickup tomorrow.",
-            "file_url": None,
-            "created_at": base_time + timedelta(days=2, hours=10, minutes=15),
-        },
+    # Define message templates (alternating between consumer and sales rep)
+    message_templates = [
+        {"is_consumer": True, "text": "Hello, I have a question about my order.", "file_url": None},
+        {"is_consumer": False, "text": "Hi! I'd be happy to help. What would you like to know?", "file_url": None},
+        {"is_consumer": True, "text": "When can I expect delivery?", "file_url": None},
+        {"is_consumer": False, "text": "The order is currently pending approval. Once approved, delivery will take 3-5 business days.", "file_url": None},
+        {"is_consumer": False, "text": "Your order has been accepted! We're processing it now.", "file_url": None},
+        {"is_consumer": True, "text": "Great! Thank you for the update.", "file_url": None},
+        {"is_consumer": True, "text": "Can I add more items to my current order?", "file_url": None},
+        {"is_consumer": False, "text": "I'm sorry, but your order is already in progress. You'll need to place a new order for additional items.", "file_url": None},
+        {"is_consumer": False, "text": "Your order has been completed and shipped!", "file_url": None},
+        {"is_consumer": True, "text": "Excellent! Can you provide the tracking number?", "file_url": None},
+        {"is_consumer": False, "text": "Tracking number: TRK123456789. You can track it on our website.", "file_url": None},
+        {"is_consumer": True, "text": "I need to modify the quantity of office chairs.", "file_url": None},
+        {"is_consumer": False, "text": "I can help with that. How many chairs would you like?", "file_url": None},
+        {"is_consumer": True, "text": "Hello, I'm interested in your product catalog.", "file_url": None},
+        {"is_consumer": False, "text": "Hello! I'd be happy to send you our latest catalog. Let me prepare that for you.", "file_url": None},
+        {"is_consumer": False, "text": "Here's our catalog:", "file_url": "https://example.com/catalog.pdf"},
+        {"is_consumer": True, "text": "What are your bulk pricing options?", "file_url": None},
+        {"is_consumer": False, "text": "We offer volume discounts for orders over 10 units. Would you like me to send you our pricing sheet?", "file_url": None},
+        {"is_consumer": False, "text": "Your order has been accepted and is being processed.", "file_url": None},
+        {"is_consumer": True, "text": "Thank you! When can we expect delivery?", "file_url": None},
+        {"is_consumer": True, "text": "Can you provide an update on our order status?", "file_url": None},
+        {"is_consumer": False, "text": "Your order is currently in progress. We'll notify you once it ships.", "file_url": None},
+        {"is_consumer": False, "text": "Your order has been completed and is ready for pickup.", "file_url": None},
+        {"is_consumer": True, "text": "Perfect! We'll arrange pickup tomorrow.", "file_url": None},
     ]
 
-    # If we have existing messages, use them (up to 24)
-    messages = (
-        existing_messages[:24]
-        if len(existing_messages) >= 24
-        else existing_messages.copy()
-    )
+    # If we have existing messages, use them
+    messages = existing_messages.copy()
     created_count = 0
 
-    # Create missing chat messages
-    for message_data in messages_data:
-        if len(messages) >= 24:
-            break  # We have enough messages
+    # Distribute messages across available sessions
+    # Each session gets messages only from its consumer and sales rep
+    template_index = 0
+    notifications_created = 0
+    for chat_session in chat_sessions:
+        if chat_session.id not in session_users:
+            continue  # Skip if we don't have user info for this session
 
-        chat_session = message_data["session"]
-        sender = message_data["sender"]
-        assert isinstance(chat_session, ChatSession), (
-            f"Expected ChatSession, got {type(chat_session)}"
+        consumer_user, sales_rep_user = session_users[chat_session.id]
+
+        # Get consumer for this session to check user_id
+        consumer_result = await session.execute(
+            select(Consumer).where(Consumer.id == chat_session.consumer_id)
         )
-        assert isinstance(sender, User), f"Expected User, got {type(sender)}"
-        message = ChatMessage(
-            session_id=chat_session.id,
-            sender_id=sender.id,
-            text=message_data["text"],
-            file_url=message_data["file_url"],
-            created_at=message_data["created_at"],
-        )
-        session.add(message)
-        messages.append(message)
-        created_count += 1
+        consumer_in_session = consumer_result.scalar_one_or_none()
+
+        # Create 3-5 messages per session (alternating between consumer and sales rep)
+        messages_per_session = min(5, len(message_templates) - template_index)
+        session_time = base_time + timedelta(hours=1)
+
+        for i in range(messages_per_session):
+            if template_index >= len(message_templates):
+                break
+
+            template = message_templates[template_index]
+            template_index += 1
+
+            # Choose sender based on template
+            sender = consumer_user if template["is_consumer"] else sales_rep_user
+
+            # Increment time for each message
+            session_time += timedelta(minutes=5 + i * 2)
+
+            message = ChatMessage(
+                session_id=chat_session.id,
+                sender_id=sender.id,
+                text=template["text"],
+                file_url=template["file_url"],
+                created_at=session_time,
+            )
+            session.add(message)
+            messages.append(message)
+            created_count += 1
+
+            # Create notification for consumer when message is sent from supplier side (matches backend router logic)
+            if not template["is_consumer"] and consumer_in_session and consumer_in_session.user_id:
+                sender_name = f"{sender.first_name} {sender.last_name}".strip() or sender.email
+                message_text = template["text"] or ""
+                notification_message = f"{sender_name} sent you a message: {message_text[:100]}{'...' if len(message_text) > 100 else ''}"
+                # Flush to get message.id before creating notification
+                await session.flush()
+                await create_notification(
+                    consumer_in_session.user_id,
+                    "chat_message",
+                    notification_message,
+                    session,
+                    entity_id=chat_session.id,
+                    entity_type="chat_session",
+                    metadata={"message_id": message.id}  # Store message_id in metadata for scrolling
+                )
+                notifications_created += 1
 
     if created_count > 0:
         await session.flush()
         await session.commit()
+
+        # Log what was created
         print(
             f"✅ Created {created_count} new chat messages (total: {len(messages)} messages)"
         )
+        print(f"   🔔 Created {notifications_created} notifications for consumers (from supplier-side messages)")
+
+        # Count total chat messages and notifications in database
+        from sqlalchemy import func
+        from app.modules.notification.model import Notification
+        chat_msg_count = await session.execute(select(func.count(ChatMessage.id)))
+        notif_count = await session.execute(select(func.count(Notification.id)))
+        print(f"   📊 Database totals: {chat_msg_count.scalar()} chat messages, {notif_count.scalar()} notifications")
     else:
         print(f"✅ All required chat messages already exist ({len(messages)} messages)")
 
-    return messages[:24]  # Return exactly 24 messages for compatibility
+    return messages
 
 
 if __name__ == "__main__":
     from app.db.session import AsyncSessionLocal
-    from scripts.seed.seed_chat_sessions import seed_chat_sessions
+    from sqlalchemy import select
+    from app.modules.chat.model import ChatSession
     from scripts.seed.seed_consumers import seed_consumers
-    from scripts.seed.seed_orders import seed_orders
+    from scripts.seed.seed_links import seed_links
     from scripts.seed.seed_suppliers import seed_suppliers
     from scripts.seed.seed_users import seed_users
 
@@ -302,8 +221,10 @@ if __name__ == "__main__":
             users = await seed_users(session)
             suppliers = await seed_suppliers(session, users)
             consumers = await seed_consumers(session, users)
-            orders = await seed_orders(session, suppliers, consumers)
-            chat_sessions = await seed_chat_sessions(session, consumers, users, orders)
+            await seed_links(session, consumers, suppliers)
+            # Get chat sessions created from accepted links
+            result = await session.execute(select(ChatSession))
+            chat_sessions = result.scalars().all()
             await seed_chat_messages(session, chat_sessions, users)
 
     asyncio.run(main())

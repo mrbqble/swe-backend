@@ -20,6 +20,7 @@ class UserResponse(BaseModel):
                 "role": "consumer",
                 "is_active": True,
                 "created_at": "2024-01-15T10:30:00Z",
+                "organization_name": "Acme Corp",
             }
         },
     )
@@ -31,6 +32,15 @@ class UserResponse(BaseModel):
     role: str
     is_active: bool
     created_at: datetime
+    organization_name: str | None = Field(
+        None, description="Organization name (for consumers only)"
+    )
+    profile_image: str | None = Field(
+        None, description="Base64 encoded profile image (for consumers only)"
+    )
+    company_name: str | None = Field(
+        None, description="Company name (for supplier staff only)"
+    )
 
 
 class UserUpdate(BaseModel):
@@ -41,6 +51,8 @@ class UserUpdate(BaseModel):
     email: EmailStr | None = None
     first_name: str | None = Field(None, min_length=1, max_length=100)
     last_name: str | None = Field(None, min_length=1, max_length=100)
+    organization_name: str | None = Field(None, min_length=1, max_length=255, description="Organization name (for consumers only)")
+    profile_image: str | None = Field(None, description="Base64 encoded profile image (for consumers only)")
 
 
 class PasswordChange(BaseModel):

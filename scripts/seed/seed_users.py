@@ -6,6 +6,8 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+# Import Notification to ensure SQLAlchemy can resolve the relationship
+from app.modules.notification.model import Notification  # noqa: F401
 from app.core.roles import Role
 from app.modules.user.model import User
 from app.utils.hashing import hash_password

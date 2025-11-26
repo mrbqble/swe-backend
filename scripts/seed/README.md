@@ -11,13 +11,12 @@ The seeding scripts are organized to respect database dependencies, ensuring tha
 3. **seed_consumers.py** - Seeds consumers (depends on users)
 4. **seed_supplier_staff.py** - Seeds supplier staff (depends on users and suppliers)
 5. **seed_products.py** - Seeds products (depends on suppliers)
-6. **seed_links.py** - Seeds links (depends on consumers and suppliers)
-7. **seed_orders.py** - Seeds orders (depends on suppliers and consumers)
+6. **seed_links.py** - Seeds links (depends on consumers and suppliers). Chat sessions are automatically created when links are accepted.
+7. **seed_orders.py** - Seeds orders (depends on suppliers and consumers). Posts structured messages to chat when orders are created.
 8. **seed_order_items.py** - Seeds order items (depends on orders and products)
-9. **seed_chat_sessions.py** - Seeds chat sessions (depends on consumers, users, and optionally orders)
-10. **seed_chat_messages.py** - Seeds chat messages (depends on chat sessions and users)
-11. **seed_complaints.py** - Seeds complaints (depends on orders, consumers, users)
-12. **seed_notifications.py** - Seeds notifications (depends on users)
+9. **seed_chat_messages.py** - Seeds chat messages (depends on chat sessions and users)
+10. **seed_chat_message_attachments.py** - Seeds chat message attachments (depends on chat messages)
+11. **seed_complaints.py** - Seeds complaints (depends on orders, consumers, users). Posts structured messages to chat when complaints are created.
 
 ## Usage
 
@@ -93,10 +92,10 @@ Multiple orders with various statuses:
 ### Other Data
 
 - **Links**: Various link statuses (pending, accepted, denied, blocked)
-- **Chat Sessions**: Both order-related and general inquiry sessions
-- **Chat Messages**: Realistic conversation threads
+- **Chat Sessions**: Automatically created when links are accepted (1-to-1 relationship: one consumer = one sales rep per supplier)
+- **Chat Messages**: Realistic conversation threads, including structured messages for orders and complaints
 - **Complaints**: Various complaint statuses (open, escalated, resolved)
-- **Notifications**: Different notification types for various users
+- **Notifications**: Created automatically by the system when orders/complaints are created/updated, chat messages are sent, or links are accepted/denied
 
 ## Safety Features
 

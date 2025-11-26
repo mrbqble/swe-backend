@@ -15,30 +15,17 @@ from app.modules.product.model import Product
 from app.modules.product.schema import ProductCreate, ProductResponse, ProductUpdate
 from app.modules.supplier.model import SupplierStaff
 from app.modules.user.model import User
-from app.utils.helpers import get_supplier_by_user_id, is_supplier_owner_or_manager
+from app.utils.helpers import (
+    get_supplier_by_user_id,
+    get_supplier_id_for_user,
+    is_supplier_owner_or_manager,
+)
 from app.utils.pagination import create_pagination_response
 
 ProductRouter = APIRouter(prefix="/products", tags=["products"])
 
 
-async def _get_supplier_id_for_user(user: User, db: AsyncSession) -> int | None:
-    """Get supplier ID for user (owner or manager)."""
-    # Check if user is supplier owner
-    supplier = await get_supplier_by_user_id(user.id, db)
-    if supplier:
-        return supplier.id
-
-    result = await db.execute(
-        select(SupplierStaff).where(
-            SupplierStaff.user_id == user.id,
-            SupplierStaff.staff_role.in_(["manager", "owner"]),
-        )
-    )
-    staff = result.scalar_one_or_none()
-    if staff:
-        return staff.supplier_id
-
-    return None
+# Use the helper function from utils instead of local function
 
 
 @ProductRouter.post(
@@ -74,7 +61,7 @@ async def create_product(
         raise ApplicationError("Not enough permissions")
 
     # Get supplier ID for user
-    supplier_id = await _get_supplier_id_for_user(current_user, db)
+    supplier_id = await get_supplier_id_for_user(current_user, db)
     if not supplier_id:
         raise ApplicationError("Supplier profile not found")
 
@@ -283,7 +270,7 @@ async def get_my_products(
         raise ApplicationError("Not enough permissions")
 
     # Get supplier ID for user
-    supplier_id = await _get_supplier_id_for_user(current_user, db)
+    supplier_id = await get_supplier_id_for_user(current_user, db)
     if not supplier_id:
         raise ApplicationError("Supplier profile not found")
 

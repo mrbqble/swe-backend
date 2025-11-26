@@ -109,6 +109,7 @@ async def seed_consumers(
             consumer = Consumer(
                 user_id=user_obj.id,
                 organization_name=org_name,
+                profile_image=None,  # Profile images are optional and set by users
                 created_at=datetime.now(UTC),
             )
             session.add(consumer)

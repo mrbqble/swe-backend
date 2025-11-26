@@ -3,13 +3,17 @@
 import asyncio
 import sys
 
+# Import all models to ensure relationships are properly registered
+# This is necessary for SQLAlchemy to resolve string-based relationships
+from app.modules.notification.model import Notification  # noqa: F401
+from app.modules.user.model import User  # noqa: F401
+
 from app.db.session import AsyncSessionLocal
+from scripts.seed.seed_chat_message_attachments import seed_chat_message_attachments
 from scripts.seed.seed_chat_messages import seed_chat_messages
-from scripts.seed.seed_chat_sessions import seed_chat_sessions
 from scripts.seed.seed_complaints import seed_complaints
 from scripts.seed.seed_consumers import seed_consumers
 from scripts.seed.seed_links import seed_links
-from scripts.seed.seed_notifications import seed_notifications
 from scripts.seed.seed_order_items import seed_order_items
 from scripts.seed.seed_orders import seed_orders
 from scripts.seed.seed_products import seed_products
@@ -46,6 +50,7 @@ async def seed_all():
             products = await seed_products(session, suppliers)
 
             # Step 6: Seed links (depends on consumers and suppliers)
+            # Note: Chat sessions are automatically created when links are accepted
             print("\n📝 Step 6: Seeding links...")
             await seed_links(session, consumers, suppliers)
 
@@ -57,21 +62,34 @@ async def seed_all():
             print("\n📝 Step 8: Seeding order items...")
             await seed_order_items(session, orders, products)
 
-            # Step 9: Seed chat sessions (depends on consumers, users, and optionally orders)
-            print("\n📝 Step 9: Seeding chat sessions...")
-            chat_sessions = await seed_chat_sessions(session, consumers, users, orders)
+            # Step 9: Get chat sessions (created automatically when links are accepted)
+            # No need to seed chat sessions separately - they're created in seed_links
+            print("\n📝 Step 9: Getting chat sessions (created from accepted links)...")
+            from sqlalchemy import select
+            from app.modules.chat.model import ChatSession
+            result = await session.execute(select(ChatSession))
+            chat_sessions = result.scalars().all()
+            print(
+                f"✅ Found {len(chat_sessions)} chat sessions from accepted links")
 
             # Step 10: Seed chat messages (depends on chat sessions and users)
             print("\n📝 Step 10: Seeding chat messages...")
-            await seed_chat_messages(session, chat_sessions, users)
+            chat_messages = await seed_chat_messages(session, chat_sessions, users)
+
+            # Step 10.5: Seed chat message attachments (depends on chat messages)
+            print("\n📝 Step 10.5: Seeding chat message attachments...")
+            await seed_chat_message_attachments(session, chat_messages)
 
             # Step 11: Seed complaints (depends on orders, consumers, users)
             print("\n📝 Step 11: Seeding complaints...")
             await seed_complaints(session, orders, consumers, users)
 
-            # Step 12: Seed notifications (depends on users)
-            print("\n📝 Step 12: Seeding notifications...")
-            await seed_notifications(session, users)
+            # Note: Notifications are created automatically by the system when:
+            # - Orders are created/status changed
+            # - Complaints are created/status changed
+            # - Chat messages are sent
+            # - Links are accepted/denied
+            # No need to seed notifications separately
 
             print("\n" + "=" * 60)
             print("✅ Database seeding completed successfully!")

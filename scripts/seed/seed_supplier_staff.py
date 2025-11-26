@@ -126,7 +126,7 @@ async def seed_supplier_staff(
         },
     ]
 
-    staff_list = []
+    staff_list: list[SupplierStaff] = []
     created_count = 0
     for staff_info in staff_data:
         user = staff_info["user"]

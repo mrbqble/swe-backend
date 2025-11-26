@@ -30,9 +30,13 @@ async def get_catalog(
     supplier_id: int = Query(..., description="Supplier ID"),
     page: int = Query(1, ge=1, description="Page number"),
     size: int = Query(20, ge=1, le=100, description="Page size"),
+    q: str | None = Query(None, description="Search query for product name, description, or SKU"),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """Get catalog for a supplier (consumer only, requires accepted link)."""
+    """Get catalog for a supplier (consumer only, requires accepted link).
+
+    Supports search by product name, description, or SKU.
+    """
     # Check user is consumer
     if current_user.role != Role.CONSUMER.value:
         raise ApplicationError("Not enough permissions")
@@ -67,11 +71,27 @@ async def get_catalog(
         Product.is_active == True,  # noqa: E712
     )
 
-    # Get total count
+    # Add search filter if query provided
+    if q:
+        search_term = f"%{q}%"
+        query = query.where(
+            (Product.name.ilike(search_term))
+            | (Product.description.ilike(search_term))
+            | (Product.sku.ilike(search_term))
+        )
+
+    # Get total count (with same search filter if provided)
     count_query = select(func.count(Product.id)).where(
         Product.supplier_id == supplier_id,
         Product.is_active == True,  # noqa: E712
     )
+    if q:
+        search_term = f"%{q}%"
+        count_query = count_query.where(
+            (Product.name.ilike(search_term))
+            | (Product.description.ilike(search_term))
+            | (Product.sku.ilike(search_term))
+        )
     count_result = await db.execute(count_query)
     total = count_result.scalar_one() or 0
 
