@@ -2,13 +2,13 @@
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import get_current_user
-from app.core.constants import ErrorMessages
+from app.core.exceptions import ApplicationError
 from app.core.roles import Role
 from app.db.session import get_db
 from app.modules.product.model import Product
@@ -71,18 +71,12 @@ async def create_product(
         Role.SUPPLIER_OWNER.value,
         Role.SUPPLIER_MANAGER.value,
     ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=ErrorMessages.NOT_ENOUGH_PERMISSIONS,
-        )
+        raise ApplicationError("Not enough permissions")
 
     # Get supplier ID for user
     supplier_id = await _get_supplier_id_for_user(current_user, db)
     if not supplier_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Supplier profile not found",
-        )
+        raise ApplicationError("Supplier profile not found")
 
     # Check if SKU already exists for this supplier
     result = await db.execute(
@@ -93,10 +87,7 @@ async def create_product(
     )
     existing_product = result.scalar_one_or_none()
     if existing_product:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Product with this SKU already exists",
-        )
+        raise ApplicationError("Product with this SKU already exists")
 
     # Create product
     product = Product(
@@ -135,29 +126,20 @@ async def update_product(
         Role.SUPPLIER_OWNER.value,
         Role.SUPPLIER_MANAGER.value,
     ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=ErrorMessages.NOT_ENOUGH_PERMISSIONS,
-        )
+        raise ApplicationError("Not enough permissions")
 
     # Get product
     result = await db.execute(select(Product).where(Product.id == product_id))
     product = result.scalar_one_or_none()
     if not product:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Product not found",
-        )
+        raise ApplicationError("Product not found")
 
     # Check user has permission for this supplier
     has_permission = await is_supplier_owner_or_manager(
         current_user, product.supplier_id, db
     )
     if not has_permission:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have permission to manage this supplier's products",
-        )
+        raise ApplicationError("You do not have permission to manage this supplier's products")
 
     # Check SKU uniqueness if SKU is being updated
     if product_data.sku and product_data.sku != product.sku:
@@ -170,10 +152,7 @@ async def update_product(
         )
         existing_product = result.scalar_one_or_none()
         if existing_product:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Product with this SKU already exists",
-            )
+            raise ApplicationError("Product with this SKU already exists")
 
     # Update product fields
     update_data = product_data.model_dump(exclude_unset=True)
@@ -198,29 +177,20 @@ async def delete_product(
         Role.SUPPLIER_OWNER.value,
         Role.SUPPLIER_MANAGER.value,
     ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=ErrorMessages.NOT_ENOUGH_PERMISSIONS,
-        )
+        raise ApplicationError("Not enough permissions")
 
     # Get product
     result = await db.execute(select(Product).where(Product.id == product_id))
     product = result.scalar_one_or_none()
     if not product:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Product not found",
-        )
+        raise ApplicationError("Product not found")
 
     # Check user has permission for this supplier
     has_permission = await is_supplier_owner_or_manager(
         current_user, product.supplier_id, db
     )
     if not has_permission:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have permission to manage this supplier's products",
-        )
+        raise ApplicationError("You do not have permission to manage this supplier's products")
 
     # Delete product
     await db.delete(product)
@@ -310,18 +280,12 @@ async def get_my_products(
         Role.SUPPLIER_OWNER.value,
         Role.SUPPLIER_MANAGER.value,
     ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=ErrorMessages.NOT_ENOUGH_PERMISSIONS,
-        )
+        raise ApplicationError("Not enough permissions")
 
     # Get supplier ID for user
     supplier_id = await _get_supplier_id_for_user(current_user, db)
     if not supplier_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Supplier profile not found",
-        )
+        raise ApplicationError("Supplier profile not found")
 
     # Build query for this supplier's products
     query = select(Product).where(Product.supplier_id == supplier_id)
@@ -378,10 +342,7 @@ async def get_product(
     )
     product = result.scalar_one_or_none()
     if not product:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Product not found",
-        )
+        raise ApplicationError("Product not found")
 
     # Convert to response and include supplier info if available
     product_dict = ProductResponse.model_validate(product).model_dump()

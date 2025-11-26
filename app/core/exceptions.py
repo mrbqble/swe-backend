@@ -16,6 +16,20 @@ from app.utils.password_policy import PasswordPolicyError
 logger = logging.getLogger(__name__)
 
 
+class ApplicationError(Exception):
+    """Custom application error that can be raised anywhere and handled globally.
+
+    Usage:
+        raise ApplicationError("Consumer profile not found")
+        raise ApplicationError("Supplier not found", code="SUPPLIER_NOT_FOUND")
+    """
+
+    def __init__(self, message: str, code: str | None = None):
+        self.message = message
+        self.code = code or "APPLICATION_ERROR"
+        super().__init__(self.message)
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     """Register all exception handlers with unified error response format."""
 
@@ -49,7 +63,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         )
 
         return JSONResponse(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content=ErrorResponse(
                 detail="Validation error: Invalid input data",
                 code="VALIDATION_ERROR",
@@ -59,11 +73,23 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(ValidationError)
     async def pydantic_validation_handler(  # pyright: ignore[reportUnusedFunction]
-        _request: Request, exc: ValidationError
+        request: Request, exc: ValidationError
     ) -> JSONResponse:
         """Handle Pydantic model validation errors."""
+        correlation_id = getattr(request.state, "correlation_id", None)
+
+        logger.warning(
+            "Pydantic validation error",
+            extra={
+                "correlation_id": correlation_id,
+                "path": request.url.path,
+                "method": request.method,
+                "errors": exc.errors(),
+            },
+        )
+
         return JSONResponse(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content=ErrorResponse(
                 detail="Validation error: Invalid model data",
                 code="VALIDATION_ERROR",
@@ -73,11 +99,23 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(PasswordPolicyError)
     async def password_policy_handler(  # pyright: ignore[reportUnusedFunction]
-        _request: Request, exc: PasswordPolicyError
+        request: Request, exc: PasswordPolicyError
     ) -> JSONResponse:
         """Handle password policy validation errors."""
+        correlation_id = getattr(request.state, "correlation_id", None)
+
+        logger.warning(
+            "Password policy error",
+            extra={
+                "correlation_id": correlation_id,
+                "path": request.url.path,
+                "method": request.method,
+                "error": str(exc),
+            },
+        )
+
         return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content=ErrorResponse(
                 detail=str(exc),
                 code="PASSWORD_POLICY_ERROR",
@@ -118,7 +156,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             code = "INTEGRITY_ERROR"
 
         return JSONResponse(
-            status_code=status.HTTP_409_CONFLICT,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content=ErrorResponse(
                 detail=detail,
                 code=code,
@@ -168,7 +206,8 @@ def register_exception_handlers(app: FastAPI) -> None:
             status.HTTP_429_TOO_MANY_REQUESTS: "RATE_LIMIT_EXCEEDED",
         }
 
-        error_code = status_code_map.get(exc.status_code, f"HTTP_{exc.status_code}")
+        error_code = status_code_map.get(
+            exc.status_code, f"HTTP_{exc.status_code}")
 
         # Log 4xx and 5xx errors with correlation ID
         if exc.status_code >= 400:
@@ -191,11 +230,36 @@ def register_exception_handlers(app: FastAPI) -> None:
             headers.update(exc.headers)
 
         return JSONResponse(
-            status_code=exc.status_code,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             headers=headers,
             content=ErrorResponse(
                 detail=exc.detail,
                 code=error_code,
+            ).model_dump(),
+        )
+
+    @app.exception_handler(ApplicationError)
+    async def application_error_handler(  # pyright: ignore[reportUnusedFunction]
+        request: Request, exc: ApplicationError
+    ) -> JSONResponse:
+        """Handle custom application errors."""
+        correlation_id = getattr(request.state, "correlation_id", None)
+
+        logger.warning(
+            "Application error",
+            extra={
+                "correlation_id": correlation_id,
+                "path": request.url.path,
+                "method": request.method,
+                "error": exc.message,
+                "error_code": exc.code,
+            },
+        )
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content=ErrorResponse(
+                detail=exc.message,
+                code=exc.code,
             ).model_dump(),
         )
 

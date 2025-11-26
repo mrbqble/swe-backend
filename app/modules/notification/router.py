@@ -2,11 +2,12 @@
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_current_user
+from app.core.exceptions import ApplicationError
 from app.db.session import get_db
 from app.modules.notification.model import Notification
 from app.modules.notification.schema import NotificationResponse
@@ -77,17 +78,13 @@ async def mark_notification_read(
     )
     notification = result.scalar_one_or_none()
     if not notification:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Notification not found",
-        )
+        raise ApplicationError("Notification not found",
+)
 
     # Check if user is the recipient
     if notification.recipient_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have permission to modify this notification",
-        )
+        raise ApplicationError("You do not have permission to modify this notification",
+)
 
     # Mark as read
     notification.is_read = True

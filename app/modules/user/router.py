@@ -1,9 +1,10 @@
 """User routes."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_current_user
+from app.core.exceptions import ApplicationError
 from app.db.session import get_db
 from app.modules.user.model import User
 from app.modules.user.schema import PasswordChange, UserResponse, UserUpdate
@@ -32,10 +33,7 @@ async def update_me(
 
         existing_user = await get_user_by_email(user_data.email, db)
         if existing_user and existing_user.id != current_user.id:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Email already registered",
-            )
+            raise ApplicationError("Email already registered")
 
     # Update fields
     update_data = user_data.model_dump(exclude_unset=True)
@@ -57,19 +55,13 @@ async def change_password(
     """Change current authenticated user's password."""
     # Verify current password
     if not verify_password(password_data.current_password, current_user.password_hash):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Current password is incorrect",
-        )
+        raise ApplicationError("Current password is incorrect")
 
     # Validate new password
     try:
         validate_password_policy(password_data.new_password)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise ApplicationError(str(e))
 
     # Update password
     current_user.password_hash = hash_password(password_data.new_password)

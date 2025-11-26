@@ -2,13 +2,13 @@
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import get_current_user
-from app.core.constants import ErrorMessages
+from app.core.exceptions import ApplicationError
 from app.core.roles import Role
 from app.db.session import get_db
 from app.modules.complaint.model import Complaint, ComplaintStatus
@@ -46,10 +46,8 @@ def _validate_status_transition(
 
     allowed = valid_transitions.get(current_status, set())
     if new_status not in allowed:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot transition from {current_status.value} to {new_status.value}",
-        )
+        raise ApplicationError(f"Cannot transition from {current_status.value} to {new_status.value}",
+)
 
 
 async def _can_access_complaint(
@@ -80,32 +78,24 @@ async def create_complaint(
     """Create a complaint (consumer only)."""
     # Check user is consumer
     if current_user.role != Role.CONSUMER.value:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=ErrorMessages.NOT_ENOUGH_PERMISSIONS,
-        )
+        raise ApplicationError("Not enough permissions",
+)
 
     # Get consumer
     consumer = await get_consumer_by_user_id(current_user.id, db)
     if not consumer:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Consumer profile not found",
-        )
+        raise ApplicationError("Consumer profile not found",
+)
 
     # Verify order exists and belongs to consumer
     result = await db.execute(select(Order).where(Order.id == complaint_data.order_id))
     order = result.scalar_one_or_none()
     if not order:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Order not found",
-        )
+        raise ApplicationError("Order not found",
+)
     if order.consumer_id != consumer.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Order does not belong to you",
-        )
+        raise ApplicationError("Order does not belong to you",
+)
 
     # Auto-assign sales rep and manager if not provided or if provided values are invalid
     sales_rep_id = complaint_data.sales_rep_id
@@ -115,7 +105,7 @@ async def create_complaint(
     if sales_rep_id:
         result = await db.execute(
             select(User).where(User.id == sales_rep_id, User.is_active)
-        )
+)
         sales_rep_user = result.scalar_one_or_none()
         if not sales_rep_user:
             sales_rep_id = None  # Invalid user, will auto-assign
@@ -125,8 +115,8 @@ async def create_complaint(
                 select(SupplierStaff).where(
                     SupplierStaff.user_id == sales_rep_id,
                     SupplierStaff.supplier_id == order.supplier_id,
-                )
-            )
+        )
+    )
             if not result.scalar_one_or_none():
                 sales_rep_id = None  # Not associated with supplier, will auto-assign
 
@@ -134,7 +124,7 @@ async def create_complaint(
     if manager_id:
         result = await db.execute(
             select(User).where(User.id == manager_id, User.is_active)
-        )
+)
         manager_user = result.scalar_one_or_none()
         if not manager_user:
             manager_id = None  # Invalid user, will auto-assign
@@ -144,16 +134,16 @@ async def create_complaint(
                 select(SupplierStaff).where(
                     SupplierStaff.user_id == manager_id,
                     SupplierStaff.supplier_id == order.supplier_id,
-                )
-            )
+        )
+    )
             if not result.scalar_one_or_none():
                 # Check if it's the supplier owner
                 result = await db.execute(
                     select(Supplier).where(
                         Supplier.id == order.supplier_id,
                         Supplier.user_id == manager_id,
-                    )
-                )
+            )
+        )
                 if not result.scalar_one_or_none():
                     manager_id = None  # Not associated with supplier, will auto-assign
 
@@ -168,7 +158,7 @@ async def create_complaint(
                 .where(SupplierStaff.staff_role.ilike("%sales%"))
                 .where(User.is_active)
                 .limit(1)
-            )
+    )
             sales_rep_staff = result.scalar_one_or_none()
             if sales_rep_staff:
                 sales_rep_id = sales_rep_staff.user_id
@@ -180,7 +170,7 @@ async def create_complaint(
                     .where(SupplierStaff.supplier_id == order.supplier_id)
                     .where(User.is_active)
                     .limit(1)
-                )
+        )
                 sales_rep_staff = result.scalar_one_or_none()
                 if sales_rep_staff:
                     sales_rep_id = sales_rep_staff.user_id
@@ -195,7 +185,7 @@ async def create_complaint(
                 .where(SupplierStaff.staff_role.ilike("%manager%"))
                 .where(User.is_active)
                 .limit(1)
-            )
+    )
             manager_staff = result.scalar_one_or_none()
             if manager_staff:
                 manager_id = manager_staff.user_id
@@ -206,7 +196,7 @@ async def create_complaint(
                     .join(User, Supplier.user_id == User.id)
                     .where(Supplier.id == order.supplier_id)
                     .where(User.is_active)
-                )
+        )
                 supplier = result.scalar_one_or_none()
                 if supplier and supplier.user_id:
                     manager_id = supplier.user_id
@@ -216,45 +206,34 @@ async def create_complaint(
         result = await db.execute(select(User).where(User.id == sales_rep_id))
         sales_rep = result.scalar_one_or_none()
         if not sales_rep:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Sales representative not found",
-            )
+            raise ApplicationError("Sales representative not found")
 
         result = await db.execute(
             select(SupplierStaff).where(
                 SupplierStaff.user_id == sales_rep_id,
                 SupplierStaff.supplier_id == order.supplier_id,
-            )
-        )
+    )
+)
         sales_rep_staff = result.scalar_one_or_none()
         if not sales_rep_staff:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Sales representative is not associated with the order's supplier",
-            )
+            raise ApplicationError("Sales representative is not associated with the order's supplier")
     else:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No sales representative found for this supplier. Please contact support.",
-        )
+        raise ApplicationError("No sales representative found for this supplier. Please contact support.",
+)
 
     # Verify manager exists and is associated with supplier
     if manager_id:
         result = await db.execute(select(User).where(User.id == manager_id))
         manager = result.scalar_one_or_none()
         if not manager:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Manager not found",
-            )
+            raise ApplicationError("Manager not found")
 
         result = await db.execute(
             select(SupplierStaff).where(
                 SupplierStaff.user_id == manager_id,
                 SupplierStaff.supplier_id == order.supplier_id,
-            )
-        )
+    )
+)
         manager_staff = result.scalar_one_or_none()
         if not manager_staff:
             # Check if it's the supplier owner
@@ -262,19 +241,14 @@ async def create_complaint(
                 select(Supplier).where(
                     Supplier.id == order.supplier_id,
                     Supplier.user_id == manager_id,
-                )
-            )
+        )
+    )
             supplier = result.scalar_one_or_none()
             if not supplier:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Manager is not associated with the order's supplier",
-                )
+                raise ApplicationError("Manager is not associated with the order's supplier")
     else:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No manager found for this supplier. Please contact support.",
-        )
+        raise ApplicationError("No manager found for this supplier. Please contact support.",
+)
 
     # Create complaint
     complaint = Complaint(
@@ -295,7 +269,7 @@ async def create_complaint(
             selectinload(Complaint.order).selectinload(Order.items),
             selectinload(Complaint.order).selectinload(Order.supplier),
             selectinload(Complaint.consumer).selectinload(Consumer.user),
-        )
+)
         .where(Complaint.id == complaint.id)
     )
     complaint = result.scalar_one()
@@ -317,23 +291,19 @@ async def get_complaint(
             selectinload(Complaint.order).selectinload(Order.items),
             selectinload(Complaint.order).selectinload(Order.supplier),
             selectinload(Complaint.consumer).selectinload(Consumer.user),
-        )
+)
         .where(Complaint.id == complaint_id)
     )
     complaint = result.scalar_one_or_none()
     if not complaint:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Complaint not found",
-        )
+        raise ApplicationError("Complaint not found",
+)
 
     # Check access
     can_access = await _can_access_complaint(current_user, complaint, db)
     if not can_access:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have permission to view this complaint",
-        )
+        raise ApplicationError("You do not have permission to view this complaint",
+)
 
     return ComplaintResponse.model_validate(complaint)
 
@@ -357,10 +327,7 @@ async def get_complaints(
     if current_user.role == Role.CONSUMER.value:
         consumer = await get_consumer_by_user_id(current_user.id, db)
         if not consumer:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Consumer profile not found",
-            )
+            raise ApplicationError("Consumer profile not found")
         query = query.where(Complaint.consumer_id == consumer.id)
 
     # Sales rep: get complaints where they are the sales rep
@@ -379,12 +346,10 @@ async def get_complaints(
             query = query.where(
                 (Complaint.manager_id == current_user.id)
                 | (Complaint.sales_rep_id == current_user.id)
-            )
+    )
     else:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=ErrorMessages.NOT_ENOUGH_PERMISSIONS,
-        )
+        raise ApplicationError("Not enough permissions",
+)
 
     # Apply status filter
     if status_filter:
@@ -407,7 +372,7 @@ async def get_complaints(
             count_query = count_query.where(
                 (Complaint.manager_id == current_user.id)
                 | (Complaint.sales_rep_id == current_user.id)
-            )
+    )
     if status_filter:
         count_query = count_query.where(Complaint.status == status_filter)
 
@@ -420,7 +385,7 @@ async def get_complaints(
             selectinload(Complaint.order).selectinload(Order.items),
             selectinload(Complaint.order).selectinload(Order.supplier),
             selectinload(Complaint.consumer).selectinload(Consumer.user),
-        )
+)
         .order_by(Complaint.created_at.desc())
         .offset((page - 1) * size)
         .limit(size)
@@ -451,29 +416,23 @@ async def update_complaint_status(
         Role.SUPPLIER_MANAGER.value,
         Role.SUPPLIER_SALES.value,
     ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=ErrorMessages.NOT_ENOUGH_PERMISSIONS,
-        )
+        raise ApplicationError("Not enough permissions",
+)
 
     # Get complaint
     result = await db.execute(select(Complaint).where(Complaint.id == complaint_id))
     complaint = result.scalar_one_or_none()
     if not complaint:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Complaint not found",
-        )
+        raise ApplicationError("Complaint not found",
+)
 
     # Check user is the sales rep or manager for this complaint
     is_sales_rep = complaint.sales_rep_id == current_user.id
     is_manager = complaint.manager_id == current_user.id
 
     if not (is_sales_rep or is_manager):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You are not the sales representative or manager for this complaint",
-        )
+        raise ApplicationError("You are not the sales representative or manager for this complaint",
+)
 
     # Validate state transition
     _validate_status_transition(
@@ -485,10 +444,8 @@ async def update_complaint_status(
         status_update.status == ComplaintStatus.RESOLVED
         and not status_update.resolution
     ):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Resolution text is required when resolving a complaint",
-        )
+        raise ApplicationError("Resolution text is required when resolving a complaint",
+)
 
     # Update status
     complaint.status = status_update.status
@@ -503,7 +460,7 @@ async def update_complaint_status(
             selectinload(Complaint.order).selectinload(Order.items),
             selectinload(Complaint.order).selectinload(Order.supplier),
             selectinload(Complaint.consumer).selectinload(Consumer.user),
-        )
+)
         .where(Complaint.id == complaint_id)
     )
     complaint = result.scalar_one()
@@ -521,48 +478,36 @@ async def submit_consumer_feedback(
     """Submit consumer feedback on a resolved complaint (consumer only)."""
     # Check user is consumer
     if current_user.role != Role.CONSUMER.value:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=ErrorMessages.NOT_ENOUGH_PERMISSIONS,
-        )
+        raise ApplicationError("Not enough permissions",
+)
 
     # Get consumer
     consumer = await get_consumer_by_user_id(current_user.id, db)
     if not consumer:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Consumer profile not found",
-        )
+        raise ApplicationError("Consumer profile not found",
+)
 
     # Get complaint
     result = await db.execute(select(Complaint).where(Complaint.id == complaint_id))
     complaint = result.scalar_one_or_none()
     if not complaint:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Complaint not found",
-        )
+        raise ApplicationError("Complaint not found",
+)
 
     # Check complaint belongs to consumer
     if complaint.consumer_id != consumer.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="This complaint does not belong to you",
-        )
+        raise ApplicationError("This complaint does not belong to you",
+)
 
     # Check complaint is resolved
     if complaint.status != ComplaintStatus.RESOLVED:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Feedback can only be submitted for resolved complaints",
-        )
+        raise ApplicationError("Feedback can only be submitted for resolved complaints",
+)
 
     # Check feedback hasn't been submitted already
     if complaint.consumer_feedback is not None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Feedback has already been submitted for this complaint",
-        )
+        raise ApplicationError("Feedback has already been submitted for this complaint",
+)
 
     # Update feedback
     complaint.consumer_feedback = feedback.satisfied
@@ -575,7 +520,7 @@ async def submit_consumer_feedback(
             selectinload(Complaint.order).selectinload(Order.items),
             selectinload(Complaint.order).selectinload(Order.supplier),
             selectinload(Complaint.consumer).selectinload(Consumer.user),
-        )
+)
         .where(Complaint.id == complaint_id)
     )
     complaint = result.scalar_one()
@@ -592,48 +537,36 @@ async def reopen_complaint(
     """Reopen a resolved complaint (consumer only, if not satisfied)."""
     # Check user is consumer
     if current_user.role != Role.CONSUMER.value:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=ErrorMessages.NOT_ENOUGH_PERMISSIONS,
-        )
+        raise ApplicationError("Not enough permissions",
+)
 
     # Get consumer
     consumer = await get_consumer_by_user_id(current_user.id, db)
     if not consumer:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Consumer profile not found",
-        )
+        raise ApplicationError("Consumer profile not found",
+)
 
     # Get complaint
     result = await db.execute(select(Complaint).where(Complaint.id == complaint_id))
     complaint = result.scalar_one_or_none()
     if not complaint:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Complaint not found",
-        )
+        raise ApplicationError("Complaint not found",
+)
 
     # Check complaint belongs to consumer
     if complaint.consumer_id != consumer.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="This complaint does not belong to you",
-        )
+        raise ApplicationError("This complaint does not belong to you",
+)
 
     # Check complaint is resolved
     if complaint.status != ComplaintStatus.RESOLVED:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only resolved complaints can be reopened",
-        )
+        raise ApplicationError("Only resolved complaints can be reopened",
+)
 
     # Check feedback: can only reopen if feedback is False (not satisfied) or None (no feedback yet)
     if complaint.consumer_feedback is True:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot reopen complaint: you indicated you were satisfied with the resolution",
-        )
+        raise ApplicationError("Cannot reopen complaint: you indicated you were satisfied with the resolution",
+)
 
     # Validate state transition (allow reopen)
     _validate_status_transition(
@@ -654,7 +587,7 @@ async def reopen_complaint(
             selectinload(Complaint.order).selectinload(Order.items),
             selectinload(Complaint.order).selectinload(Order.supplier),
             selectinload(Complaint.consumer).selectinload(Consumer.user),
-        )
+)
         .where(Complaint.id == complaint_id)
     )
     complaint = result.scalar_one()

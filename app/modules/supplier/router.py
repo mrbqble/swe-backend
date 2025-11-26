@@ -1,10 +1,11 @@
 """Supplier routes."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import get_current_user
+from app.core.exceptions import ApplicationError
 from app.core.roles import Role
 from app.db.session import get_db
 from app.modules.supplier.model import Supplier, SupplierStaff
@@ -21,10 +22,7 @@ async def get_my_supplier(
 ):
     """Get current authenticated supplier's profile."""
     if current_user.role != Role.SUPPLIER_OWNER:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only supplier owners can access this endpoint",
-        )
+        raise ApplicationError("Only supplier owners can access this endpoint")
 
     stmt = (
         select(Supplier)
@@ -35,10 +33,7 @@ async def get_my_supplier(
     supplier = result.scalar_one_or_none()
 
     if not supplier:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Supplier profile not found",
-        )
+        raise ApplicationError("Supplier profile not found")
 
     return supplier
 
@@ -51,20 +46,14 @@ async def update_my_supplier(
 ):
     """Update current authenticated supplier's profile."""
     if current_user.role != Role.SUPPLIER_OWNER:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only supplier owners can update supplier profile",
-        )
+        raise ApplicationError("Only supplier owners can update supplier profile")
 
     stmt = select(Supplier).where(Supplier.user_id == current_user.id)
     result = await db.execute(stmt)
     supplier = result.scalar_one_or_none()
 
     if not supplier:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Supplier profile not found",
-        )
+        raise ApplicationError("Supplier profile not found")
 
     # Update fields
     update_data = supplier_data.model_dump(exclude_unset=True)
@@ -84,20 +73,14 @@ async def deactivate_my_supplier(
 ):
     """Deactivate current authenticated supplier's account."""
     if current_user.role != Role.SUPPLIER_OWNER:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only supplier owners can deactivate supplier account",
-        )
+        raise ApplicationError("Only supplier owners can deactivate supplier account")
 
     stmt = select(Supplier).where(Supplier.user_id == current_user.id)
     result = await db.execute(stmt)
     supplier = result.scalar_one_or_none()
 
     if not supplier:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Supplier profile not found",
-        )
+        raise ApplicationError("Supplier profile not found")
 
     supplier.is_active = False
     await db.commit()
@@ -112,20 +95,14 @@ async def delete_my_supplier(
 ):
     """Delete current authenticated supplier's account."""
     if current_user.role != Role.SUPPLIER_OWNER:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only supplier owners can delete supplier account",
-        )
+        raise ApplicationError("Only supplier owners can delete supplier account")
 
     stmt = select(Supplier).where(Supplier.user_id == current_user.id)
     result = await db.execute(stmt)
     supplier = result.scalar_one_or_none()
 
     if not supplier:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Supplier profile not found",
-        )
+        raise ApplicationError("Supplier profile not found")
 
     await db.delete(supplier)
     await db.commit()
@@ -140,10 +117,7 @@ async def get_supplier_staff(
 ):
     """Get all staff members for current supplier."""
     if current_user.role not in [Role.SUPPLIER_OWNER, Role.SUPPLIER_MANAGER]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only supplier owners and managers can view staff",
-        )
+        raise ApplicationError("Only supplier owners and managers can view staff")
 
     # Get supplier for current user
     stmt = select(Supplier).where(Supplier.user_id == current_user.id)
@@ -156,16 +130,13 @@ async def get_supplier_staff(
             select(SupplierStaff)
             .where(SupplierStaff.user_id == current_user.id)
             .options(selectinload(SupplierStaff.supplier))
-        )
+)
         result = await db.execute(stmt)
         staff_record = result.scalar_one_or_none()
         if staff_record:
             supplier = staff_record.supplier
         else:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Supplier not found",
-            )
+            raise ApplicationError("Supplier not found")
 
     # Get all staff for this supplier
     stmt = (
@@ -199,10 +170,7 @@ async def create_supplier_staff(
 ):
     """Create a new staff member for current supplier."""
     if current_user.role != Role.SUPPLIER_OWNER:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only supplier owners can create staff members",
-        )
+        raise ApplicationError("Only supplier owners can create staff members")
 
     # Get supplier for current user
     stmt = select(Supplier).where(Supplier.user_id == current_user.id)
@@ -210,10 +178,7 @@ async def create_supplier_staff(
     supplier = result.scalar_one_or_none()
 
     if not supplier:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Supplier profile not found",
-        )
+        raise ApplicationError("Supplier profile not found")
 
     # Create user first (this would typically be done via auth endpoint)
     # For now, we'll assume the user already exists and we're just linking them
@@ -231,10 +196,7 @@ async def delete_supplier_staff(
 ):
     """Delete a staff member from current supplier."""
     if current_user.role != Role.SUPPLIER_OWNER:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only supplier owners can delete staff members",
-        )
+        raise ApplicationError("Only supplier owners can delete staff members")
 
     # Get supplier for current user
     stmt = select(Supplier).where(Supplier.user_id == current_user.id)
@@ -242,10 +204,7 @@ async def delete_supplier_staff(
     supplier = result.scalar_one_or_none()
 
     if not supplier:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Supplier profile not found",
-        )
+        raise ApplicationError("Supplier profile not found")
 
     # Get staff member
     stmt = select(SupplierStaff).where(
@@ -256,10 +215,7 @@ async def delete_supplier_staff(
     staff = result.scalar_one_or_none()
 
     if not staff:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Staff member not found",
-        )
+        raise ApplicationError("Staff member not found")
 
     await db.delete(staff)
     await db.commit()
@@ -275,10 +231,7 @@ async def deactivate_supplier_staff(
 ):
     """Deactivate a staff member."""
     if current_user.role != Role.SUPPLIER_OWNER:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only supplier owners can deactivate staff members",
-        )
+        raise ApplicationError("Only supplier owners can deactivate staff members")
 
     # Get supplier for current user
     stmt = select(Supplier).where(Supplier.user_id == current_user.id)
@@ -286,10 +239,7 @@ async def deactivate_supplier_staff(
     supplier = result.scalar_one_or_none()
 
     if not supplier:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Supplier profile not found",
-        )
+        raise ApplicationError("Supplier profile not found")
 
     # Get staff member
     stmt = (
@@ -297,17 +247,14 @@ async def deactivate_supplier_staff(
         .where(
             SupplierStaff.id == staff_id,
             SupplierStaff.supplier_id == supplier.id,
-        )
+)
         .options(selectinload(SupplierStaff.user))
     )
     result = await db.execute(stmt)
     staff = result.scalar_one_or_none()
 
     if not staff:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Staff member not found",
-        )
+        raise ApplicationError("Staff member not found")
 
     staff.user.is_active = False
     await db.commit()

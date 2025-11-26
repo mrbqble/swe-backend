@@ -6,7 +6,7 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.constants import ErrorMessages
+from app.core.exceptions import ApplicationError
 from app.core.roles import Role
 from app.core.security import decode_access_token
 from app.db.session import get_db
@@ -24,11 +24,7 @@ class HTTPBearer401(HTTPBearer):
         except HTTPException as e:
             # Convert 403 (Forbidden) to 401 (Unauthorized) for missing/invalid credentials
             if e.status_code == status.HTTP_403_FORBIDDEN:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail=ErrorMessages.COULD_NOT_VALIDATE_CREDENTIALS,
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
+                raise ApplicationError("Could not validate credentials")
             raise
 
 
@@ -42,25 +38,16 @@ async def get_current_user(
     """Get current authenticated user from JWT token."""
     payload = decode_access_token(credentials.credentials)
     if payload is None or (user_id := payload.get("sub")) is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=ErrorMessages.COULD_NOT_VALIDATE_CREDENTIALS
+        raise ApplicationError(
+            "Could not validate credentials"
             if payload is None
-            else ErrorMessages.INVALID_TOKEN_PAYLOAD,
-            headers={"WWW-Authenticate": "Bearer"},
+            else "Invalid token payload"
         )
     user = await get_user_by_id(user_id, db)
     if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=ErrorMessages.USER_NOT_FOUND,
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise ApplicationError("User not found")
     if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=ErrorMessages.USER_INACTIVE,
-        )
+        raise ApplicationError("User account is inactive")
     return user
 
 
@@ -76,10 +63,7 @@ def require_roles(*roles: Role):
         except ValueError:
             user_role = None
         if user_role is None or user_role not in roles:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=ErrorMessages.NOT_ENOUGH_PERMISSIONS,
-            )
+            raise ApplicationError("Not enough permissions")
         return current_user
 
     return role_checker

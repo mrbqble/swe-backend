@@ -2,13 +2,13 @@
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import get_current_user
-from app.core.constants import ErrorMessages
+from app.core.exceptions import ApplicationError
 from app.core.roles import Role
 from app.db.session import get_db
 from app.modules.chat.model import ChatMessage, ChatSession
@@ -54,7 +54,7 @@ async def _is_session_participant(
         # Check if sales rep is the supplier owner
         result = await db.execute(
             select(Supplier).where(Supplier.user_id == session.sales_rep_id)
-        )
+)
         supplier = result.scalar_one_or_none()
         if supplier:
             supplier_id = supplier.id
@@ -66,7 +66,7 @@ async def _is_session_participant(
         select(SupplierStaff).where(
             SupplierStaff.user_id == user.id,
             SupplierStaff.supplier_id == supplier_id,
-        )
+)
     )
     if result.scalar_one_or_none():
         return True
@@ -76,7 +76,7 @@ async def _is_session_participant(
         select(Supplier).where(
             Supplier.id == supplier_id,
             Supplier.user_id == user.id,
-        )
+)
     )
     return result.scalar_one_or_none() is not None
 
@@ -92,18 +92,14 @@ async def create_chat_session(
     """Create a chat session (consumer only)."""
     # Check user is consumer
     if current_user.role != Role.CONSUMER.value:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=ErrorMessages.NOT_ENOUGH_PERMISSIONS,
-        )
+        raise ApplicationError("Not enough permissions",
+)
 
     # Get consumer
     consumer = await get_consumer_by_user_id(current_user.id, db)
     if not consumer:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Consumer profile not found",
-        )
+        raise ApplicationError("Consumer profile not found",
+)
 
     sales_rep_id = session_data.sales_rep_id
     order = None
@@ -112,26 +108,17 @@ async def create_chat_session(
     if session_data.order_id:
         result = await db.execute(
             select(Order).where(Order.id == session_data.order_id)
-        )
+)
         order = result.scalar_one_or_none()
         if not order:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Order not found",
-            )
+            raise ApplicationError("Order not found")
         if order.consumer_id != consumer.id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Order does not belong to you",
-            )
+            raise ApplicationError("Order does not belong to you")
 
     # Auto-assign sales rep if not provided and order_id is given
     if not sales_rep_id:
         if not order:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Either sales_rep_id or order_id must be provided",
-            )
+            raise ApplicationError("Either sales_rep_id or order_id must be provided")
 
         # Get supplier from order
         supplier_id = order.supplier_id
@@ -144,7 +131,7 @@ async def create_chat_session(
             .where(SupplierStaff.staff_role.ilike("%sales%"))
             .where(User.is_active)
             .limit(1)
-        )
+)
         sales_rep_staff = result.scalar_one_or_none()
         if sales_rep_staff:
             sales_rep_id = sales_rep_staff.user_id
@@ -156,7 +143,7 @@ async def create_chat_session(
                 .where(SupplierStaff.supplier_id == supplier_id)
                 .where(User.is_active)
                 .limit(1)
-            )
+    )
             sales_rep_staff = result.scalar_one_or_none()
             if sales_rep_staff:
                 sales_rep_id = sales_rep_staff.user_id
@@ -167,24 +154,19 @@ async def create_chat_session(
                     .join(User, Supplier.user_id == User.id)
                     .where(Supplier.id == supplier_id)
                     .where(User.is_active)
-                )
+        )
                 supplier = result.scalar_one_or_none()
                 if supplier and supplier.user_id:
                     sales_rep_id = supplier.user_id
                 else:
-                    raise HTTPException(
-                        status_code=status.HTTP_404_NOT_FOUND,
-                        detail="No sales representative found for this supplier. Please contact support.",
-                    )
+                    raise ApplicationError("No sales representative found for this supplier. Please contact support.")
 
     # Verify sales rep exists and is a valid user
     result = await db.execute(select(User).where(User.id == sales_rep_id))
     sales_rep = result.scalar_one_or_none()
     if not sales_rep:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Sales representative not found",
-        )
+        raise ApplicationError("Sales representative not found",
+)
 
     # If order_id is provided, verify sales rep is associated with the order's supplier
     if order:
@@ -192,8 +174,8 @@ async def create_chat_session(
             select(SupplierStaff).where(
                 SupplierStaff.user_id == sales_rep_id,
                 SupplierStaff.supplier_id == order.supplier_id,
-            )
-        )
+    )
+)
         staff = result.scalar_one_or_none()
         if not staff:
             # Check if it's the supplier owner
@@ -201,24 +183,18 @@ async def create_chat_session(
                 select(Supplier).where(
                     Supplier.id == order.supplier_id,
                     Supplier.user_id == sales_rep_id,
-                )
-            )
+        )
+    )
             if not result.scalar_one_or_none():
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Sales representative is not associated with the order's supplier",
-                )
+                raise ApplicationError("Sales representative is not associated with the order's supplier")
     else:
         # If no order_id, just verify the user is a sales rep
         result = await db.execute(
             select(SupplierStaff).where(SupplierStaff.user_id == sales_rep_id)
-        )
+)
         staff = result.scalar_one_or_none()
         if not staff:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="User is not a sales representative",
-            )
+            raise ApplicationError("User is not a sales representative")
 
     # Create chat session
     chat_session = ChatSession(
@@ -236,7 +212,7 @@ async def create_chat_session(
         .options(
             selectinload(ChatSession.consumer).selectinload(Consumer.user),
             selectinload(ChatSession.sales_rep),
-        )
+)
         .where(ChatSession.id == chat_session.id)
     )
     chat_session = result.scalar_one()
@@ -263,10 +239,7 @@ async def get_chat_sessions(
     if current_user.role == Role.CONSUMER.value:
         consumer = await get_consumer_by_user_id(current_user.id, db)
         if not consumer:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Consumer profile not found",
-            )
+            raise ApplicationError("Consumer profile not found")
         query = query.where(ChatSession.consumer_id == consumer.id)
 
     # Supplier staff (owner, manager, sales rep): get all sessions for their supplier
@@ -285,30 +258,27 @@ async def get_chat_sessions(
             # If not supplier owner, check if they're staff
             result = await db.execute(
                 select(SupplierStaff).where(SupplierStaff.user_id == current_user.id)
-            )
+    )
             staff = result.scalar_one_or_none()
             if staff:
                 supplier_id = staff.supplier_id
 
         if not supplier_id:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Supplier profile not found for this user",
-            )
+            raise ApplicationError("Supplier profile not found for this user")
 
         # Get all staff user IDs for this supplier (including owner)
         # First, get the supplier owner
         result = await db.execute(
             select(Supplier.user_id).where(Supplier.id == supplier_id)
-        )
+)
         owner_user_id = result.scalar_one_or_none()
 
         # Get all staff user IDs
         result = await db.execute(
             select(SupplierStaff.user_id).where(
                 SupplierStaff.supplier_id == supplier_id
-            )
-        )
+    )
+)
         staff_user_ids = [row[0] for row in result.all()]
 
         # Combine owner and staff user IDs
@@ -323,10 +293,8 @@ async def get_chat_sessions(
             # No staff found, return empty result
             query = query.where(ChatSession.id == -1)  # Impossible condition
     else:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=ErrorMessages.NOT_ENOUGH_PERMISSIONS,
-        )
+        raise ApplicationError("Not enough permissions",
+)
 
     # Get total count using the same filtering logic
     count_query = select(func.count(ChatSession.id))
@@ -343,11 +311,11 @@ async def get_chat_sessions(
         if supplier_user_ids:
             count_query = count_query.where(
                 ChatSession.sales_rep_id.in_(supplier_user_ids)
-            )
+    )
         else:
             count_query = count_query.where(
                 ChatSession.id == -1
-            )  # Impossible condition
+    )  # Impossible condition
 
     count_result = await db.execute(count_query)
     total = count_result.scalar_one() or 0
@@ -357,7 +325,7 @@ async def get_chat_sessions(
         query.options(
             selectinload(ChatSession.consumer).selectinload(Consumer.user),
             selectinload(ChatSession.sales_rep),
-        )
+)
         .order_by(ChatSession.created_at.desc())
         .offset((page - 1) * size)
         .limit(size)
@@ -374,7 +342,7 @@ async def get_chat_sessions(
             .where(ChatMessage.session_id == session.id)
             .order_by(ChatMessage.created_at.desc())
             .limit(1)
-        )
+)
         last_msg_result = await db.execute(last_msg_query)
         last_message = last_msg_result.scalar_one_or_none()
 
@@ -383,7 +351,7 @@ async def get_chat_sessions(
         # Use model_copy to create a new instance with last_message
         session_response = session_response.model_copy(
             update={"last_message": last_message}
-        )
+)
         session_responses.append(session_response)
 
     return create_pagination_response(session_responses, page, size, total).model_dump()
@@ -405,18 +373,14 @@ async def create_chat_message(
     result = await db.execute(select(ChatSession).where(ChatSession.id == session_id))
     session = result.scalar_one_or_none()
     if not session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Chat session not found",
-        )
+        raise ApplicationError("Chat session not found",
+)
 
     # Check if user is a participant
     is_participant = await _is_session_participant(current_user, session, db)
     if not is_participant:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You are not a participant in this chat session",
-        )
+        raise ApplicationError("You are not a participant in this chat session",
+)
 
     # Create message
     message = ChatMessage(
@@ -447,18 +411,14 @@ async def get_chat_messages(
     result = await db.execute(select(ChatSession).where(ChatSession.id == session_id))
     session = result.scalar_one_or_none()
     if not session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Chat session not found",
-        )
+        raise ApplicationError("Chat session not found",
+)
 
     # Check if user is a participant
     is_participant = await _is_session_participant(current_user, session, db)
     if not is_participant:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You are not a participant in this chat session",
-        )
+        raise ApplicationError("You are not a participant in this chat session",
+)
 
     # Get messages
     query = select(ChatMessage).where(ChatMessage.session_id == session_id)

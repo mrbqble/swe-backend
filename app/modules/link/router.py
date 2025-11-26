@@ -4,13 +4,13 @@ import contextlib
 import logging
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import get_current_user
-from app.core.constants import ErrorMessages
+from app.core.exceptions import ApplicationError
 from app.core.roles import Role
 from app.db.session import get_db
 from app.modules.consumer.model import Consumer
@@ -46,10 +46,8 @@ def _validate_status_transition(
 
     allowed = valid_transitions.get(current_status, set[LinkStatus]())
     if new_status not in allowed:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot transition from {current_status.value} to {new_status.value}",
-        )
+        raise ApplicationError(f"Cannot transition from {current_status.value} to {new_status.value}",
+)
 
 
 @LinkRouter.post(
@@ -63,10 +61,8 @@ async def create_link_request(
     """Create a link request (consumer only)."""
     # Check user is consumer
     if current_user.role != Role.CONSUMER.value:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=ErrorMessages.NOT_ENOUGH_PERMISSIONS,
-        )
+        raise ApplicationError("Not enough permissions",
+)
 
     # Get consumer
     consumer = await get_consumer_by_user_id(current_user.id, db)
@@ -78,16 +74,14 @@ async def create_link_request(
             current_user.id,
             current_user.role,
             bool(consumer),
-        )
+)
     if not consumer:
         logger.warning(
             "Consumer profile not found for user_id=%s when creating link request",
             current_user.id,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Consumer profile not found",
-        )
+)
+        raise ApplicationError("Consumer profile not found",
+)
 
     # Check supplier exists
     result = await db.execute(
@@ -95,24 +89,20 @@ async def create_link_request(
     )
     supplier = result.scalar_one_or_none()
     if not supplier:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Supplier not found",
-        )
+        raise ApplicationError("Supplier not found",
+)
 
     # Check if link already exists
     result = await db.execute(
         select(Link).where(
             Link.consumer_id == consumer.id,
             Link.supplier_id == request.supplier_id,
-        )
+)
     )
     existing_link = result.scalar_one_or_none()
     if existing_link:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Link request already exists",
-        )
+        raise ApplicationError("Link request already exists",
+)
 
     # Create link request
     link = Link(
@@ -130,7 +120,7 @@ async def create_link_request(
         .options(
             selectinload(Link.supplier),
             selectinload(Link.consumer).selectinload(Consumer.user),
-        )
+)
         .where(Link.id == link.id)
     )
     link = result.scalar_one()
@@ -152,20 +142,16 @@ async def update_link_status(
         Role.SUPPLIER_MANAGER.value,
         Role.SUPPLIER_SALES.value,
     ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=ErrorMessages.NOT_ENOUGH_PERMISSIONS,
-        )
+        raise ApplicationError("Not enough permissions",
+)
 
     # Sales can only approve/deny pending requests, not block
     if (
         current_user.role == Role.SUPPLIER_SALES.value
         and status_update.status == LinkStatus.BLOCKED
     ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Sales representatives cannot block links. Only owners and managers can block links.",
-        )
+        raise ApplicationError("Sales representatives cannot block links. Only owners and managers can block links.",
+)
 
     # Get link with supplier
     result = await db.execute(
@@ -173,10 +159,8 @@ async def update_link_status(
     )
     link = result.scalar_one_or_none()
     if not link:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Link not found",
-        )
+        raise ApplicationError("Link not found",
+)
 
     # Check user has permission for this supplier
     # For sales, we need to check if they're staff of this supplier
@@ -186,20 +170,18 @@ async def update_link_status(
                 SupplierStaff.user_id == current_user.id,
                 SupplierStaff.supplier_id == link.supplier_id,
                 SupplierStaff.staff_role == "sales",
-            )
-        )
+    )
+)
         staff = result.scalar_one_or_none()
         has_permission = staff is not None
     else:
         has_permission = await is_supplier_owner_or_manager(
             current_user, link.supplier_id, db
-        )
+)
 
     if not has_permission:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have permission to manage this supplier's links",
-        )
+        raise ApplicationError("You do not have permission to manage this supplier's links",
+)
 
     # Validate state transition
     _validate_status_transition(link.status, status_update.status)
@@ -215,7 +197,7 @@ async def update_link_status(
         .options(
             selectinload(Link.supplier),
             selectinload(Link.consumer).selectinload(Consumer.user),
-        )
+)
         .where(Link.id == link_id)
     )
     link = result.scalar_one()
@@ -242,10 +224,8 @@ async def get_incoming_links(
         Role.SUPPLIER_MANAGER.value,
         Role.SUPPLIER_SALES.value,
     ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=ErrorMessages.NOT_ENOUGH_PERMISSIONS,
-        )
+        raise ApplicationError("Not enough permissions",
+)
 
     # Get supplier
     supplier = await get_supplier_by_user_id(current_user.id, db)
@@ -255,14 +235,11 @@ async def get_incoming_links(
             select(SupplierStaff).where(
                 SupplierStaff.user_id == current_user.id,
                 SupplierStaff.staff_role.in_(["manager", "owner", "sales"]),
-            )
-        )
+    )
+)
         staff = result.scalar_one_or_none()
         if not staff:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Supplier profile not found",
-            )
+            raise ApplicationError("Supplier profile not found")
         supplier_id = staff.supplier_id
     else:
         supplier_id = supplier.id
@@ -307,15 +284,13 @@ async def get_link(
         .options(
             selectinload(Link.consumer).selectinload(Consumer.user),
             selectinload(Link.supplier),
-        )
+)
         .where(Link.id == link_id)
     )
     link = result.scalar_one_or_none()
     if not link:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Link not found",
-        )
+        raise ApplicationError("Link not found",
+)
 
     # Check access: consumer can see their own links
     if current_user.role == Role.CONSUMER.value:
@@ -330,14 +305,11 @@ async def get_link(
     ):
         has_permission = await is_supplier_owner_or_manager(
             current_user, link.supplier_id, db
-        )
+)
         if has_permission:
             return LinkResponse.model_validate(link)
 
-    raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail="You do not have permission to view this link",
-    )
+    raise ApplicationError("You do not have permission to view this link")
 
 
 @LinkRouter.get("", response_model=dict)  # Will be PaginationResponse[LinkResponse]
@@ -353,18 +325,14 @@ async def get_consumer_links(
     """Get consumer's own links with pagination (consumer only)."""
     # Check user is consumer
     if current_user.role != Role.CONSUMER.value:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=ErrorMessages.NOT_ENOUGH_PERMISSIONS,
-        )
+        raise ApplicationError("Not enough permissions",
+)
 
     # Get consumer
     consumer = await get_consumer_by_user_id(current_user.id, db)
     if not consumer:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Consumer profile not found",
-        )
+        raise ApplicationError("Consumer profile not found",
+)
 
     # Build query
     query = select(Link).where(Link.consumer_id == consumer.id)

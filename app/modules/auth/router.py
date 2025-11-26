@@ -3,10 +3,10 @@
 import contextlib
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.constants import ErrorMessages
+from app.core.exceptions import ApplicationError
 from app.core.roles import Role
 from app.core.security import (
     create_access_token,
@@ -72,19 +72,13 @@ async def signup(
     existing_user = await get_user_by_email(request.email, db)
 
     if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=ErrorMessages.EMAIL_ALREADY_REGISTERED,
-        )
+        raise ApplicationError("Email already registered")
 
     # Validate password policy
     try:
         validate_password_policy(request.password)
     except ValueError as e:  # PasswordPolicyError is a ValueError subclass
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise ApplicationError(str(e))
 
     password_hash = hash_password(request.password)
     user = User(
@@ -100,7 +94,8 @@ async def signup(
     consumer = None
     try:
         role_value = (
-            request.role.value if hasattr(request.role, "value") else str(request.role)
+            request.role.value if hasattr(
+                request.role, "value") else str(request.role)
         )
         db.add(user)
         # Flush so user.id is populated for the consumer FK
@@ -127,10 +122,7 @@ async def signup(
         with contextlib.suppress(Exception):
             await db.rollback()
         logger.error(f"Failed to create user and consumer: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=ErrorMessages.FAILED_TO_CREATE_USER,
-        )
+        raise ApplicationError("Failed to create user account")
 
     return _create_tokens(user)
 
@@ -160,22 +152,11 @@ async def login(
     """
     user = await get_user_by_email(request.email, db)
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=ErrorMessages.INCORRECT_CREDENTIALS,
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise ApplicationError("Incorrect email or password")
     if not verify_password(request.password, user.password_hash):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=ErrorMessages.INCORRECT_CREDENTIALS,
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise ApplicationError("Incorrect email or password")
     if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=ErrorMessages.USER_INACTIVE,
-        )
+        raise ApplicationError("User account is inactive")
     return _create_tokens(user)
 
 
@@ -200,16 +181,8 @@ async def refresh(
     """
     payload = decode_refresh_token(request.refresh_token)
     if payload is None or (user_id := payload.get("sub")) is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=ErrorMessages.INVALID_REFRESH_TOKEN,
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise ApplicationError("Invalid refresh token")
     user = await get_user_by_id(user_id, db)
     if not user or not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=ErrorMessages.USER_NOT_FOUND_OR_INACTIVE,
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise ApplicationError("User not found or inactive")
     return _create_tokens(user)

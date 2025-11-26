@@ -2,12 +2,12 @@
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_current_user
-from app.core.constants import ErrorMessages
+from app.core.exceptions import ApplicationError
 from app.core.roles import Role
 from app.db.session import get_db
 from app.modules.link.model import Link, LinkStatus
@@ -35,27 +35,18 @@ async def get_catalog(
     """Get catalog for a supplier (consumer only, requires accepted link)."""
     # Check user is consumer
     if current_user.role != Role.CONSUMER.value:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=ErrorMessages.NOT_ENOUGH_PERMISSIONS,
-        )
+        raise ApplicationError("Not enough permissions")
 
     # Get consumer
     consumer = await get_consumer_by_user_id(current_user.id, db)
     if not consumer:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Consumer profile not found",
-        )
+        raise ApplicationError("Consumer profile not found")
 
     # Check if supplier exists
     result = await db.execute(select(Supplier).where(Supplier.id == supplier_id))
     supplier = result.scalar_one_or_none()
     if not supplier:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Supplier not found",
-        )
+        raise ApplicationError("Supplier not found")
 
     # Check if link exists and is accepted
     result = await db.execute(
@@ -67,10 +58,8 @@ async def get_catalog(
     )
     link = result.scalar_one_or_none()
     if not link:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have an accepted link with this supplier",
-        )
+        raise ApplicationError(
+            "You do not have an accepted link with this supplier")
 
     # Get active products for this supplier
     query = select(Product).where(
@@ -88,7 +77,8 @@ async def get_catalog(
 
     # Get paginated results
     query = (
-        query.order_by(Product.created_at.desc()).offset((page - 1) * size).limit(size)
+        query.order_by(Product.created_at.desc()).offset(
+            (page - 1) * size).limit(size)
     )
     result = await db.execute(query)
     products = result.scalars().all()
@@ -125,9 +115,11 @@ async def list_suppliers(
     total = count_result.scalar_one() or 0
 
     # paginated
-    query = query.order_by(Supplier.company_name.asc()).offset((page - 1) * size).limit(size)
+    query = query.order_by(Supplier.company_name.asc()).offset(
+        (page - 1) * size).limit(size)
     result = await db.execute(query)
     suppliers = result.scalars().all()
 
-    supplier_responses = [SupplierResponse.model_validate(s) for s in suppliers]
+    supplier_responses = [
+        SupplierResponse.model_validate(s) for s in suppliers]
     return create_pagination_response(supplier_responses, page, size, total).model_dump()

@@ -35,7 +35,7 @@ class StructuredLoggingMiddleware(BaseHTTPMiddleware):
         user_agent = request.headers.get("user-agent")
 
         logger.info(
-            "Request started",
+            f"Request started: {method} {path}",
             extra={
                 "correlation_id": correlation_id,
                 "method": method,
@@ -53,7 +53,7 @@ class StructuredLoggingMiddleware(BaseHTTPMiddleware):
             latency_ms = (time.time() - start_time) * 1000
 
             logger.info(
-                "Request completed",
+                f"Request completed: {method} {path} - {response.status_code} ({round(latency_ms, 2)}ms)",
                 extra={
                     "correlation_id": correlation_id,
                     "method": method,
@@ -71,7 +71,7 @@ class StructuredLoggingMiddleware(BaseHTTPMiddleware):
         except Exception as e:
             latency_ms = (time.time() - start_time) * 1000
             logger.error(
-                "Request failed",
+                f"Request failed: {method} {path} - {type(e).__name__} ({round(latency_ms, 2)}ms)",
                 extra={
                     "correlation_id": correlation_id,
                     "method": method,

@@ -2,13 +2,13 @@
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
 from app.api.dependencies import get_current_user
-from app.core.constants import ErrorMessages
+from app.core.exceptions import ApplicationError
 from app.core.roles import Role
 from app.db.session import get_db
 from app.modules.consumer.model import Consumer
@@ -42,10 +42,8 @@ def _validate_status_transition(
 
     allowed = valid_transitions.get(current_status, set[OrderStatus]())
     if new_status not in allowed:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot transition from {current_status.value} to {new_status.value}",
-        )
+        raise ApplicationError(f"Cannot transition from {current_status.value} to {new_status.value}",
+)
 
 
 @OrderRouter.post("", response_model=OrderResponse, status_code=status.HTTP_201_CREATED)
@@ -57,18 +55,14 @@ async def create_order(
     """Create an order (consumer only)."""
     # Check user is consumer
     if current_user.role != Role.CONSUMER.value:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=ErrorMessages.NOT_ENOUGH_PERMISSIONS,
-        )
+        raise ApplicationError("Not enough permissions",
+)
 
     # Get consumer
     consumer = await get_consumer_by_user_id(current_user.id, db)
     if not consumer:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Consumer profile not found",
-        )
+        raise ApplicationError("Consumer profile not found",
+)
 
     # Check if supplier exists
     result = await db.execute(
@@ -76,10 +70,8 @@ async def create_order(
     )
     supplier = result.scalar_one_or_none()
     if not supplier:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Supplier not found",
-        )
+        raise ApplicationError("Supplier not found",
+)
 
     # Check if link exists and is accepted
     result = await db.execute(
@@ -87,14 +79,12 @@ async def create_order(
             Link.consumer_id == consumer.id,
             Link.supplier_id == order_data.supplier_id,
             Link.status == LinkStatus.ACCEPTED,
-        )
+)
     )
     link = result.scalar_one_or_none()
     if not link:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have an accepted link with this supplier",
-        )
+        raise ApplicationError("You do not have an accepted link with this supplier",
+)
 
     # Validate items and calculate total
     total = 0
@@ -103,35 +93,23 @@ async def create_order(
     for item_data in order_data.items:
         # Validate quantity
         if item_data.qty <= 0:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Quantity must be positive for product {item_data.product_id}",
-            )
+            raise ApplicationError(f"Quantity must be positive for product {item_data.product_id}")
 
         # Get product
         result = await db.execute(
             select(Product).where(Product.id == item_data.product_id)
-        )
+)
         product = result.scalar_one_or_none()
         if not product:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Product {item_data.product_id} not found",
-            )
+            raise ApplicationError(f"Product {item_data.product_id} not found")
 
         # Check product belongs to supplier
         if product.supplier_id != order_data.supplier_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Product {item_data.product_id} does not belong to supplier {order_data.supplier_id}",
-            )
+            raise ApplicationError(f"Product {item_data.product_id} does not belong to supplier {order_data.supplier_id}")
 
         # Check product is active
         if not product.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Product {item_data.product_id} is not active",
-            )
+            raise ApplicationError(f"Product {item_data.product_id} is not active")
 
         # Calculate item total
         item_total = product.price_kzt * item_data.qty
@@ -142,7 +120,7 @@ async def create_order(
             product_id=item_data.product_id,
             qty=item_data.qty,
             unit_price_kzt=product.price_kzt,
-        )
+)
         order_items.append(order_item)
 
     # Create order
@@ -170,7 +148,7 @@ async def create_order(
             selectinload(Order.items),
             joinedload(Order.supplier).joinedload(Supplier.user),
             joinedload(Order.consumer).joinedload(Consumer.user),
-        )
+)
         .where(Order.id == order.id)
     )
     order = result.scalar_one()
@@ -192,15 +170,13 @@ async def get_order(
             selectinload(Order.items),
             joinedload(Order.supplier).joinedload(Supplier.user),
             joinedload(Order.consumer).joinedload(Consumer.user),
-        )
+)
         .where(Order.id == order_id)
     )
     order = result.scalar_one_or_none()
     if not order:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Order not found",
-        )
+        raise ApplicationError("Order not found",
+)
 
     # Check access: consumer can see their own orders
     if current_user.role == Role.CONSUMER.value:
@@ -215,14 +191,11 @@ async def get_order(
     ):
         has_permission = await is_supplier_owner_or_manager(
             current_user, order.supplier_id, db
-        )
+)
         if has_permission:
             return OrderResponse.model_validate(order)
 
-    raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail="You do not have permission to view this order",
-    )
+    raise ApplicationError("You do not have permission to view this order")
 
 
 @OrderRouter.get("", response_model=dict)  # Will be PaginationResponse[OrderResponse]
@@ -248,10 +221,7 @@ async def get_orders(
     if current_user.role == Role.CONSUMER.value:
         consumer = await get_consumer_by_user_id(current_user.id, db)
         if not consumer:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Consumer profile not found",
-            )
+            raise ApplicationError("Consumer profile not found")
         consumer_id = consumer.id
         query = query.where(Order.consumer_id == consumer_id)
 
@@ -268,24 +238,19 @@ async def get_orders(
                 select(SupplierStaff).where(
                     SupplierStaff.user_id == current_user.id,
                     SupplierStaff.staff_role.in_(["manager", "owner", "sales"]),
-                )
-            )
+        )
+    )
             staff = result.scalar_one_or_none()
             if not staff:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Supplier profile not found",
-                )
+                raise ApplicationError("Supplier profile not found")
             supplier_id = staff.supplier_id
         else:
             supplier_id = supplier.id
 
         query = query.where(Order.supplier_id == supplier_id)
     else:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=ErrorMessages.NOT_ENOUGH_PERMISSIONS,
-        )
+        raise ApplicationError("Not enough permissions",
+)
 
     # Apply status filter
     if status_filter:
@@ -328,10 +293,8 @@ async def update_order_status(
         Role.SUPPLIER_OWNER.value,
         Role.SUPPLIER_MANAGER.value,
     ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=ErrorMessages.NOT_ENOUGH_PERMISSIONS,
-        )
+        raise ApplicationError("Not enough permissions",
+)
 
     # Get order with items and products (for stock updates)
     result = await db.execute(
@@ -341,20 +304,16 @@ async def update_order_status(
     )
     order = result.scalar_one_or_none()
     if not order:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Order not found",
-        )
+        raise ApplicationError("Order not found",
+)
 
     # Check user has permission for this supplier
     has_permission = await is_supplier_owner_or_manager(
         current_user, order.supplier_id, db
     )
     if not has_permission:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have permission to manage this supplier's orders",
-        )
+        raise ApplicationError("You do not have permission to manage this supplier's orders",
+)
 
     # Validate state transition
     _validate_status_transition(order.status, status_update.status)
@@ -365,14 +324,11 @@ async def update_order_status(
         for item in order.items:
             result = await db.execute(
                 select(Product).where(Product.id == item.product_id)
-            )
+    )
             product = result.scalar_one_or_none()
             if product:
                 if product.stock_qty < item.qty:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail=f"Insufficient stock for product {product.name}. Available: {product.stock_qty}, Required: {item.qty}",
-                    )
+                    raise ApplicationError(f"Insufficient stock for product {product.name}. Available: {product.stock_qty}, Required: {item.qty}")
                 product.stock_qty -= item.qty
     elif (
         status_update.status == OrderStatus.REJECTED
@@ -382,7 +338,7 @@ async def update_order_status(
         for item in order.items:
             result = await db.execute(
                 select(Product).where(Product.id == item.product_id)
-            )
+    )
             product = result.scalar_one_or_none()
             if product:
                 product.stock_qty += item.qty
@@ -399,7 +355,7 @@ async def update_order_status(
             selectinload(Order.items),
             joinedload(Order.supplier).joinedload(Supplier.user),
             joinedload(Order.consumer).joinedload(Consumer.user),
-        )
+)
         .where(Order.id == order.id)
     )
     order = result.scalar_one()
