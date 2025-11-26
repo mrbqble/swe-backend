@@ -3,7 +3,6 @@
 from fastapi import FastAPI
 
 from app.api.catalog import CatalogueRouter
-from app.api.main import MainRouter
 from app.core.config import settings
 from app.modules.auth.router import AuthRouter
 from app.modules.chat.router import ChatRouter
@@ -18,7 +17,6 @@ from app.modules.user.router import UserRouter
 
 def register_routers(app: FastAPI) -> None:
     """Register all API routers."""
-    app.include_router(MainRouter)
     app.include_router(CatalogueRouter, prefix=settings.API_V1_PREFIX)
     app.include_router(AuthRouter, prefix=settings.API_V1_PREFIX)
     app.include_router(ChatRouter, prefix=settings.API_V1_PREFIX)

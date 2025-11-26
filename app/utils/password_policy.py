@@ -39,21 +39,3 @@ def validate_password_policy(password: str) -> None:
 
     if errors:
         raise PasswordPolicyError("; ".join(errors))
-
-
-def get_password_policy_description() -> str:
-    """Get human-readable password policy description."""
-    requirements: list[str] = [
-        f"At least {settings.PASSWORD_MIN_LENGTH} characters",
-    ]
-
-    if settings.PASSWORD_REQUIRE_UPPERCASE:
-        requirements.append("one uppercase letter")
-    if settings.PASSWORD_REQUIRE_LOWERCASE:
-        requirements.append("one lowercase letter")
-    if settings.PASSWORD_REQUIRE_DIGIT:
-        requirements.append("one digit")
-    if settings.PASSWORD_REQUIRE_SPECIAL:
-        requirements.append("one special character")
-
-    return f"Password must contain: {', '.join(requirements)}"

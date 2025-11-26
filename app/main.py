@@ -6,14 +6,12 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from slowapi.middleware import SlowAPIMiddleware
 
 from app.api.router import register_routers
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import setup_logging
 from app.core.middleware import StructuredLoggingMiddleware
-from app.core.rate_limit import limiter, register_rate_limit_handler
 from app.db.session import engine
 
 setup_logging(log_level=settings.LOG_LEVEL, env=settings.ENV)
@@ -36,10 +34,12 @@ async def lifespan(_app: FastAPI):
 
 # Disable OpenAPI docs in production unless explicitly enabled
 docs_url = (
-    "/docs" if (settings.ENV != "production" or settings.ENABLE_DOCS_IN_PROD) else None
+    "/docs" if (settings.ENV !=
+                "production" or settings.ENABLE_DOCS_IN_PROD) else None
 )
 redoc_url = (
-    "/redoc" if (settings.ENV != "production" or settings.ENABLE_DOCS_IN_PROD) else None
+    "/redoc" if (settings.ENV !=
+                 "production" or settings.ENABLE_DOCS_IN_PROD) else None
 )
 
 app = FastAPI(
@@ -103,11 +103,5 @@ app.add_middleware(
 
 app.add_middleware(StructuredLoggingMiddleware)
 
-# Rate limiting middleware (must be added after CORS)
-if settings.RATE_LIMIT_ENABLED:
-    app.state.limiter = limiter
-    app.add_middleware(SlowAPIMiddleware)
-
 register_exception_handlers(app)
-register_rate_limit_handler(app)
 register_routers(app)

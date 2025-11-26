@@ -5,40 +5,6 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class HealthCheckResponse(BaseModel):
-    """Health check response schema."""
-
-    model_config = ConfigDict(
-        strict=True,
-        json_schema_extra={
-            "example": {
-                "status": "ok",
-                "env": "dev",
-                "db": "ok",
-            }
-        },
-    )
-
-    status: str = Field(..., description="Overall health status (ok, degraded)")
-    env: str = Field(..., description="Environment name")
-    db: str = Field(..., description="Database health status (ok, error)")
-
-
-class MessageResponse(BaseModel):
-    """Message response schema."""
-
-    model_config = ConfigDict(
-        strict=True,
-        json_schema_extra={
-            "example": {
-                "message": "Hello World",
-            }
-        },
-    )
-
-    message: str = Field(..., description="Response message")
-
-
 class ErrorResponse(BaseModel):
     """Error response schema."""
 

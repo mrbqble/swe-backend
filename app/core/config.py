@@ -27,11 +27,6 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
     CORS_ORIGINS: str | list[str] = "http://localhost:3000,http://localhost:8000"
 
-    # Rate limiting
-    RATE_LIMIT_ENABLED: bool = True
-    RATE_LIMIT_PER_MINUTE: int = 100  # Default rate limit per minute
-    RATE_LIMIT_AUTH_PER_MINUTE: int = 10  # Stricter limit for auth endpoints
-
     # Password policy
     PASSWORD_MIN_LENGTH: int = 8
     PASSWORD_REQUIRE_UPPERCASE: bool = True
@@ -40,7 +35,8 @@ class Settings(BaseSettings):
     PASSWORD_REQUIRE_SPECIAL: bool = False  # Optional for now
 
     # Observability
-    SLOW_QUERY_THRESHOLD_MS: int = 1000  # Log queries slower than this (milliseconds)
+    # Log queries slower than this (milliseconds)
+    SLOW_QUERY_THRESHOLD_MS: int = 1000
     HEALTH_CHECK_TIMEOUT_SECONDS: float = 5.0  # Timeout for DB health check
 
     # Security hardening

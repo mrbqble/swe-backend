@@ -1,25 +1,3 @@
-# PowerShell script encoding: UTF-8 with BOM
-# ==============================================================================
-# scripts.ps1 - PowerShell Development Scripts
-# ==============================================================================
-# This script provides convenient commands for common development tasks,
-# similar to npm scripts.
-#
-# Usage:
-#   .\scripts.ps1 <command> [parameters]
-#
-# Examples:
-#   .\scripts.ps1 install              # Install dependencies
-#   .\scripts.ps1 dev                  # Run development server
-#   .\scripts.ps1 migrate -MESSAGE "Add users table"  # Create migration
-#
-# For a list of all available commands, run:
-#   .\scripts.ps1 help
-#   .\scripts.ps1                    # (no command also shows help)
-#
-# Note: This script is designed for Windows PowerShell. For Linux/Mac,
-# ==============================================================================
-
 <#
 .SYNOPSIS
     Development script runner for B2B Supplier-Wholesale Exchange Platform
@@ -57,23 +35,19 @@ param(
     [string]$MESSAGE = ""
 )
 
-# Set error action preference
 $ErrorActionPreference = "Stop"
 
-# Helper function to check if a command exists
 function Test-Command {
     param([string]$CommandName)
     $null -ne (Get-Command $CommandName -ErrorAction SilentlyContinue)
 }
 
-# Helper function to display error and exit
 function Write-ErrorAndExit {
     param([string]$Message, [int]$ExitCode = 1)
     Write-Host $Message -ForegroundColor Red
     exit $ExitCode
 }
 
-# Helper function to run command with error handling
 function Invoke-CommandSafe {
     param(
         [string]$Description,
@@ -91,11 +65,24 @@ function Invoke-CommandSafe {
     }
 }
 
-switch ($Command.ToLower()) {
-    # ==========================================================================
-    # Setup & Installation
-    # ==========================================================================
+function Get-DockerComposeCommand {
+    if (-not (Test-Command "docker")) {
+        Write-ErrorAndExit "[ERROR] Docker is not installed or not in PATH" 1
+    }
+    try {
+        docker compose version 2>&1 | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            return "docker compose"
+        }
+    } catch {
+    }
+    if (Test-Command "docker-compose") {
+        return "docker-compose"
+    }
+    Write-ErrorAndExit "[ERROR] Neither 'docker compose' nor 'docker-compose' is available" 1
+}
 
+switch ($Command.ToLower()) {
     "install" {
         Invoke-CommandSafe "[*] Installing dependencies..." "pip install -r requirements.txt"
         Write-Host "[OK] Dependencies installed successfully" -ForegroundColor Green
@@ -104,6 +91,16 @@ switch ($Command.ToLower()) {
     "install-dev" {
         Invoke-CommandSafe "[*] Installing dependencies..." "pip install -r requirements.txt"
         Write-Host "[OK] Development environment ready!" -ForegroundColor Green
+    }
+
+    "venv" {
+        if (Test-Path .venv) {
+            Write-Host "[!] Virtual environment already exists at .venv" -ForegroundColor Yellow
+        } else {
+            Invoke-CommandSafe "[*] Creating virtual environment..." "python -m venv .venv"
+            Write-Host "[OK] Virtual environment created at .venv" -ForegroundColor Green
+            Write-Host "[*] To activate, run: .venv\Scripts\Activate.ps1" -ForegroundColor Cyan
+        }
     }
 
     "setup-env" {
@@ -120,10 +117,6 @@ switch ($Command.ToLower()) {
         }
     }
 
-    # ==========================================================================
-    # Development Server
-    # ==========================================================================
-
     "dev" {
         Write-Host "[*] Starting development server..." -ForegroundColor Green
         Write-Host "   Server will be available at http://localhost:8000" -ForegroundColor Cyan
@@ -136,10 +129,18 @@ switch ($Command.ToLower()) {
         uvicorn app.main:app --host 0.0.0.0 --port 8000
     }
 
+    "test" {
+        Invoke-CommandSafe "[*] Running tests..." "pytest"
+    }
 
-    # ==========================================================================
-    # Database Migrations
-    # ==========================================================================
+    "test-verbose" {
+        Invoke-CommandSafe "[*] Running tests (verbose)..." "pytest -v"
+    }
+
+    "test-cov" {
+        Invoke-CommandSafe "[*] Running tests with coverage..." "pytest --cov=app --cov-report=html --cov-report=term"
+    }
+
 
     "migrate" {
         if ($MESSAGE -eq "") {
@@ -167,56 +168,71 @@ switch ($Command.ToLower()) {
         Invoke-CommandSafe "[*] Rolling back one migration..." "alembic downgrade -1"
     }
 
+    "db-reset" {
+        Write-Host "[!] WARNING: This will drop all tables and recreate them!" -ForegroundColor Red
+        $response = Read-Host "Are you sure you want to reset the database? (y/N)"
+        if ($response -eq "y" -or $response -eq "Y") {
+            Invoke-CommandSafe "[*] Dropping all tables..." "alembic downgrade base"
+            Invoke-CommandSafe "[*] Recreating database schema..." "alembic upgrade head"
+            Write-Host "[OK] Database reset complete" -ForegroundColor Green
+        } else {
+            Write-Host "[*] Database reset cancelled" -ForegroundColor Yellow
+        }
+    }
 
-    # ==========================================================================
-    # Docker Operations
-    # ==========================================================================
+    "seed" {
+        Invoke-CommandSafe "[*] Seeding database..." "python -m scripts.seed.seed_all"
+        Write-Host "[OK] Database seeding complete" -ForegroundColor Green
+    }
 
     "docker-build" {
         Invoke-CommandSafe "[*] Building Docker image..." "docker build -t swe-backend ."
     }
 
     "docker-up" {
-        Invoke-CommandSafe "[*] Starting Docker Compose services..." "docker-compose up -d"
+        $dockerComposeCmd = Get-DockerComposeCommand
+        Invoke-CommandSafe "[*] Starting Docker Compose services..." "$dockerComposeCmd up -d"
     }
 
     "docker-down" {
-        Invoke-CommandSafe "[*] Stopping Docker Compose services..." "docker-compose down"
+        $dockerComposeCmd = Get-DockerComposeCommand
+        Invoke-CommandSafe "[*] Stopping Docker Compose services..." "$dockerComposeCmd down"
     }
 
     "docker-restart" {
-        Invoke-CommandSafe "[*] Restarting Docker Compose services..." "docker-compose restart"
+        $dockerComposeCmd = Get-DockerComposeCommand
+        Invoke-CommandSafe "[*] Restarting Docker Compose services..." "$dockerComposeCmd restart"
     }
 
     "docker-logs" {
+        $dockerComposeCmd = Get-DockerComposeCommand
         Write-Host "[*] Viewing Docker Compose logs (Ctrl+C to exit)..." -ForegroundColor Green
-        docker-compose logs -f
+        $cmdParts = $dockerComposeCmd.Split(' ')
+        & $cmdParts[0] $cmdParts[1] logs -f
     }
 
     "docker-shell" {
+        $dockerComposeCmd = Get-DockerComposeCommand
         Write-Host "[*] Opening shell in Docker container..." -ForegroundColor Green
-        docker-compose exec app bash
+        $cmdParts = $dockerComposeCmd.Split(' ')
+        & $cmdParts[0] $cmdParts[1] exec app bash
     }
 
     "docker-clean" {
+        $dockerComposeCmd = Get-DockerComposeCommand
         Write-Host "[*] Cleaning Docker resources..." -ForegroundColor Green
-        docker-compose down -v
+        $cmdParts = $dockerComposeCmd.Split(' ')
+        & $cmdParts[0] $cmdParts[1] down -v
         docker system prune -f
         Write-Host "[OK] Docker cleanup complete" -ForegroundColor Green
     }
 
-    # ==========================================================================
-    # Maintenance
-    # ==========================================================================
-
     "clean" {
         Write-Host "[*] Cleaning cache and build files..." -ForegroundColor Green
 
-        # Remove Python cache files
         Get-ChildItem -Path . -Include __pycache__,*.pyc -Recurse -Force -ErrorAction SilentlyContinue |
             Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 
-        # Remove build cache
         $cacheDirs = @("build", "dist")
         foreach ($dir in $cacheDirs) {
             if (Test-Path $dir) {
@@ -224,7 +240,6 @@ switch ($Command.ToLower()) {
             }
         }
 
-        # Remove egg-info directories
         Get-ChildItem -Path . -Filter *.egg-info -Directory -ErrorAction SilentlyContinue |
             Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 
@@ -234,8 +249,6 @@ switch ($Command.ToLower()) {
     "clean-all" {
         Write-Host "[*] Performing deep cleanup..." -ForegroundColor Green
         & $PSScriptRoot\scripts.ps1 clean
-
-        # Remove virtual environment (if exists)
         if (Test-Path .venv) {
             $response = Read-Host "Remove .venv directory? (y/N)"
             if ($response -eq "y" -or $response -eq "Y") {
@@ -243,13 +256,8 @@ switch ($Command.ToLower()) {
                 Write-Host "[OK] Virtual environment removed" -ForegroundColor Green
             }
         }
-
         Write-Host "[OK] Deep cleanup complete" -ForegroundColor Green
     }
-
-    # ==========================================================================
-    # Help
-    # ==========================================================================
 
     "help" {
         Write-Host ""
@@ -259,6 +267,7 @@ switch ($Command.ToLower()) {
         Write-Host ""
 
         Write-Host "[*] Setup & Installation:" -ForegroundColor Yellow
+        Write-Host "  .\scripts.ps1 venv             Create virtual environment" -ForegroundColor White
         Write-Host "  .\scripts.ps1 install          Install production dependencies" -ForegroundColor White
         Write-Host "  .\scripts.ps1 install-dev      Install dependencies" -ForegroundColor White
         Write-Host "  .\scripts.ps1 setup-env        Create .env file from env.example" -ForegroundColor White
@@ -274,6 +283,14 @@ switch ($Command.ToLower()) {
         Write-Host "  .\scripts.ps1 revision -MESSAGE `"desc`"  Alias for migrate" -ForegroundColor White
         Write-Host "  .\scripts.ps1 upgrade            Apply all migrations" -ForegroundColor White
         Write-Host "  .\scripts.ps1 downgrade          Rollback one migration" -ForegroundColor White
+        Write-Host "  .\scripts.ps1 db-reset           Reset database (drop & recreate)" -ForegroundColor White
+        Write-Host "  .\scripts.ps1 seed               Seed database with sample data" -ForegroundColor White
+        Write-Host ""
+
+        Write-Host "[*] Testing:" -ForegroundColor Yellow
+        Write-Host "  .\scripts.ps1 test               Run tests" -ForegroundColor White
+        Write-Host "  .\scripts.ps1 test-verbose       Run tests (verbose output)" -ForegroundColor White
+        Write-Host "  .\scripts.ps1 test-cov           Run tests with coverage report" -ForegroundColor White
         Write-Host ""
 
         Write-Host "[*] Docker:" -ForegroundColor Yellow

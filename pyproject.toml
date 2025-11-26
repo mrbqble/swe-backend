@@ -1,22 +1,11 @@
-# ==============================================================================
-# pyproject.toml - Project Configuration
-# ==============================================================================
-
 [build-system]
-# Build system configuration (PEP 517/518)
-# Specifies the build backend and requirements
 requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-# Project metadata (PEP 621)
 name = "swe-backend"
 version = "1.0.0"
 description = "B2B Supplier-Wholesale Exchange Platform Backend"
 readme = "README.md"
 requires-python = ">=3.13.5"
-# Note: Dependencies are managed in requirements.txt
-# This is intentional to keep the setup simple
-# If you want to migrate to pyproject.toml dependencies, use:
-# dependencies = ["fastapi>=0.121.2", "uvicorn[standard]>=0.38.0", ...]
 
