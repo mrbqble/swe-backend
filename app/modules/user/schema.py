@@ -10,7 +10,7 @@ class UserResponse(BaseModel):
 
     model_config = ConfigDict(
         from_attributes=True,
-        strict=True,
+        strict=False,  # Allow type coercion for nested validation
         json_schema_extra={
             "example": {
                 "id": 1,
@@ -40,6 +40,9 @@ class UserResponse(BaseModel):
     )
     company_name: str | None = Field(
         None, description="Company name (for supplier staff only)"
+    )
+    company_logo: str | None = Field(
+        None, description="Base64 encoded company logo (for supplier staff only)"
     )
 
 

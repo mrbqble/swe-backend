@@ -108,7 +108,7 @@ class OrderResponse(BaseModel):
 
     model_config = ConfigDict(
         from_attributes=True,
-        strict=True,
+        strict=False,  # Allow type coercion for nested validation
         json_schema_extra={
             "example": {
                 "id": 1,

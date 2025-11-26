@@ -15,6 +15,8 @@ class SupplierResponse(BaseModel):
     company_name: str
     is_active: bool
     created_at: datetime
+    # Base64-encoded company logo (no file upload, stored as string)
+    company_logo: str | None = None
 
 
 class SupplierUpdate(BaseModel):
@@ -24,6 +26,7 @@ class SupplierUpdate(BaseModel):
 
     company_name: str | None = None
     is_active: bool | None = None
+    company_logo: str | None = None
 
 
 class StaffCreateRequest(BaseModel):
@@ -49,8 +52,10 @@ class StaffCreateRequest(BaseModel):
         max_length=128,
         description="Staff member password (min 8 chars, must contain uppercase, lowercase, and digit)",
     )
-    first_name: str = Field(..., min_length=1, max_length=100, description="Staff member first name")
-    last_name: str = Field(..., min_length=1, max_length=100, description="Staff member last name")
+    first_name: str = Field(..., min_length=1, max_length=100,
+                            description="Staff member first name")
+    last_name: str = Field(..., min_length=1, max_length=100,
+                           description="Staff member last name")
     staff_role: Literal["manager", "sales"] = Field(
         ..., description="Staff role (manager or sales)"
     )
@@ -69,3 +74,28 @@ class StaffResponse(BaseModel):
     role: str
     is_active: bool
     created_at: datetime
+
+
+class StaffUpdate(BaseModel):
+    """Schema for updating an existing staff member."""
+
+    model_config = ConfigDict(from_attributes=True, strict=False)
+
+    email: EmailStr | None = Field(
+        None, description="Updated staff member email address"
+    )
+    first_name: str | None = Field(
+        None,
+        min_length=1,
+        max_length=100,
+        description="Updated staff member first name",
+    )
+    last_name: str | None = Field(
+        None,
+        min_length=1,
+        max_length=100,
+        description="Updated staff member last name",
+    )
+    staff_role: Literal["manager", "sales"] | None = Field(
+        None, description="Updated staff role (manager or sales)"
+    )

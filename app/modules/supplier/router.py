@@ -16,6 +16,7 @@ from app.modules.supplier.model import Supplier, SupplierStaff
 from app.modules.supplier.schema import (
     StaffCreateRequest,
     StaffResponse,
+    StaffUpdate,
     SupplierResponse,
     SupplierUpdate,
 )
@@ -33,7 +34,7 @@ async def get_my_supplier(
     db: AsyncSession = Depends(get_db),
 ):
     """Get current authenticated supplier's profile."""
-    if current_user.role != Role.SUPPLIER_OWNER:
+    if current_user.role != Role.SUPPLIER_OWNER.value:
         raise ApplicationError("Only supplier owners can access this endpoint")
 
     stmt = (
@@ -57,7 +58,7 @@ async def update_my_supplier(
     db: AsyncSession = Depends(get_db),
 ):
     """Update current authenticated supplier's profile."""
-    if current_user.role != Role.SUPPLIER_OWNER:
+    if current_user.role != Role.SUPPLIER_OWNER.value:
         raise ApplicationError(
             "Only supplier owners can update supplier profile")
 
@@ -85,7 +86,7 @@ async def deactivate_my_supplier(
     db: AsyncSession = Depends(get_db),
 ):
     """Deactivate current authenticated supplier's account."""
-    if current_user.role != Role.SUPPLIER_OWNER:
+    if current_user.role != Role.SUPPLIER_OWNER.value:
         raise ApplicationError(
             "Only supplier owners can deactivate supplier account")
 
@@ -131,7 +132,7 @@ async def get_supplier_staff(
     db: AsyncSession = Depends(get_db),
 ):
     """Get all staff members for current supplier."""
-    if current_user.role not in [Role.SUPPLIER_OWNER, Role.SUPPLIER_MANAGER]:
+    if current_user.role not in [Role.SUPPLIER_OWNER.value, Role.SUPPLIER_MANAGER.value]:
         raise ApplicationError(
             "Only supplier owners and managers can view staff")
 
@@ -189,7 +190,7 @@ async def create_supplier_staff(
 
     Only supplier owners can create staff members through the web app.
     """
-    if current_user.role != Role.SUPPLIER_OWNER:
+    if current_user.role != Role.SUPPLIER_OWNER.value:
         raise ApplicationError("Only supplier owners can create staff members")
 
     # Get supplier for current user
@@ -262,7 +263,7 @@ async def delete_supplier_staff(
     db: AsyncSession = Depends(get_db),
 ):
     """Delete a staff member from current supplier."""
-    if current_user.role != Role.SUPPLIER_OWNER:
+    if current_user.role != Role.SUPPLIER_OWNER.value:
         raise ApplicationError("Only supplier owners can delete staff members")
 
     # Get supplier for current user
@@ -297,7 +298,7 @@ async def deactivate_supplier_staff(
     db: AsyncSession = Depends(get_db),
 ):
     """Deactivate a staff member."""
-    if current_user.role != Role.SUPPLIER_OWNER:
+    if current_user.role != Role.SUPPLIER_OWNER.value:
         raise ApplicationError(
             "Only supplier owners can deactivate staff members")
 
@@ -328,3 +329,117 @@ async def deactivate_supplier_staff(
     await db.commit()
 
     return {"message": "Staff member deactivated successfully"}
+
+
+@SupplierRouter.patch("/staff/{staff_id}/activate")
+async def activate_supplier_staff(
+    staff_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Activate a previously deactivated staff member."""
+    if current_user.role != Role.SUPPLIER_OWNER.value:
+        raise ApplicationError("Only supplier owners can activate staff members")
+
+    # Get supplier for current user
+    stmt = select(Supplier).where(Supplier.user_id == current_user.id)
+    result = await db.execute(stmt)
+    supplier = result.scalar_one_or_none()
+
+    if not supplier:
+        raise ApplicationError("Supplier profile not found")
+
+    # Get staff member
+    stmt = (
+        select(SupplierStaff)
+        .where(
+            SupplierStaff.id == staff_id,
+            SupplierStaff.supplier_id == supplier.id,
+        )
+        .options(selectinload(SupplierStaff.user))
+    )
+    result = await db.execute(stmt)
+    staff = result.scalar_one_or_none()
+
+    if not staff:
+        raise ApplicationError("Staff member not found")
+
+    staff.user.is_active = True
+    await db.commit()
+
+    return {"message": "Staff member activated successfully"}
+
+
+@SupplierRouter.patch("/staff/{staff_id}", response_model=StaffResponse)
+async def update_supplier_staff(
+    staff_id: int,
+    staff_data: StaffUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update an existing staff member's details (name, email, role)."""
+    if current_user.role != Role.SUPPLIER_OWNER.value:
+        raise ApplicationError("Only supplier owners can update staff members")
+
+    # Get supplier for current user
+    stmt = select(Supplier).where(Supplier.user_id == current_user.id)
+    result = await db.execute(stmt)
+    supplier = result.scalar_one_or_none()
+
+    if not supplier:
+        raise ApplicationError("Supplier profile not found")
+
+    # Get staff member belonging to this supplier
+    stmt = (
+        select(SupplierStaff)
+        .where(
+            SupplierStaff.id == staff_id,
+            SupplierStaff.supplier_id == supplier.id,
+        )
+        .options(selectinload(SupplierStaff.user))
+    )
+    result = await db.execute(stmt)
+    staff = result.scalar_one_or_none()
+
+    if not staff:
+        raise ApplicationError("Staff member not found")
+
+    user = staff.user
+
+    # If email is being changed, ensure it's not taken by another user
+    if staff_data.email and staff_data.email != user.email:
+        existing_user = await get_user_by_email(staff_data.email, db)
+        if existing_user and existing_user.id != user.id:
+            raise ApplicationError("User with this email already exists")
+        user.email = staff_data.email
+
+    # Update first/last name if provided
+    if staff_data.first_name is not None:
+        user.first_name = staff_data.first_name
+    if staff_data.last_name is not None:
+        user.last_name = staff_data.last_name
+
+    # Update staff role if provided
+    if staff_data.staff_role is not None:
+        if staff_data.staff_role == "manager":
+            user.role = Role.SUPPLIER_MANAGER.value
+        elif staff_data.staff_role == "sales":
+            user.role = Role.SUPPLIER_SALES.value
+        else:
+            raise ApplicationError(f"Invalid staff role: {staff_data.staff_role}")
+        staff.staff_role = staff_data.staff_role
+
+    await db.commit()
+    await db.refresh(staff)
+    await db.refresh(user)
+
+    return StaffResponse(
+        id=staff.id,
+        user_id=user.id,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        email=user.email,
+        role=staff.staff_role,
+        is_active=user.is_active,
+        created_at=staff.created_at,
+    )

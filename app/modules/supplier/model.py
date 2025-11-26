@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -48,6 +48,8 @@ class Supplier(Base):
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     company_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Base64-encoded company logo image (no file upload handling, stored as text)
+    company_logo: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(
         Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(

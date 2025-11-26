@@ -23,7 +23,6 @@ from app.utils.helpers import (
     assign_sales_representative,
     create_notification,
     get_consumer_by_user_id,
-    get_supplier_by_user_id,
     get_supplier_id_for_user,
     is_supplier_owner_or_manager,
 )
@@ -42,11 +41,14 @@ def _validate_status_transition(
         LinkStatus.PENDING: {LinkStatus.ACCEPTED, LinkStatus.DENIED},
         LinkStatus.ACCEPTED: {
             LinkStatus.BLOCKED,
-            LinkStatus.PENDING,
-        },  # Allow unlinking back to pending
-        LinkStatus.DENIED: {LinkStatus.PENDING},
+            LinkStatus.UNLINKED,
+        },  # Allow blocking or unlinking
+        # Allow accepting denied requests
+        LinkStatus.DENIED: {LinkStatus.PENDING, LinkStatus.ACCEPTED},
         # Allow unblocking back to accepted
         LinkStatus.BLOCKED: {LinkStatus.ACCEPTED},
+        # Allow accepting unlinked requests directly
+        LinkStatus.UNLINKED: {LinkStatus.PENDING, LinkStatus.ACCEPTED},
     }
 
     allowed = valid_transitions.get(current_status, set[LinkStatus]())
@@ -233,6 +235,7 @@ async def update_link_status(
             LinkStatus.DENIED: f"Your linking request to {supplier_name} has been declined.",
             LinkStatus.BLOCKED: f"Your link with {supplier_name} has been blocked.",
             LinkStatus.PENDING: f"Your linking request to {supplier_name} status has been updated to pending.",
+            LinkStatus.UNLINKED: f"Your link with {supplier_name} has been unlinked. You can request to link again.",
         }
 
         notification_types = {
@@ -240,6 +243,7 @@ async def update_link_status(
             LinkStatus.DENIED: "link_denied",
             LinkStatus.BLOCKED: "link_blocked",
             LinkStatus.PENDING: "link_status_updated",
+            LinkStatus.UNLINKED: "link_unlinked",
         }
 
         message = status_messages.get(status_update.status)
@@ -293,10 +297,7 @@ async def update_link_status(
 async def get_incoming_links(
     current_user: Annotated[User, Depends(get_current_user)],
     page: int = Query(1, ge=1, description="Page number"),
-    size: int = Query(20, ge=1, le=100, description="Page size"),
-    status_filter: LinkStatus | None = Query(
-        None, description="Filter by status", alias="status"
-    ),
+    size: int = Query(20, ge=1, le=10000, description="Page size"),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Get incoming link requests for supplier (owner/manager/sales can view)."""
@@ -314,16 +315,12 @@ async def get_incoming_links(
     if not supplier_id:
         raise ApplicationError("Supplier profile not found")
 
-    # Build query
+    # Build query - no status filtering, all links are returned
     query = select(Link).where(Link.supplier_id == supplier_id)
-    if status_filter:
-        query = query.where(Link.status == status_filter)
 
     # Get total count
     count_query = select(func.count(Link.id)).where(
         Link.supplier_id == supplier_id)
-    if status_filter:
-        count_query = count_query.where(Link.status == status_filter)
     count_result = await db.execute(count_query)
     total = count_result.scalar_one() or 0
 

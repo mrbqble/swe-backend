@@ -57,51 +57,61 @@ async def seed_suppliers(
             "user": supplier_owners[0],
             "company_name": "Tech Supplies Co.",
             "is_active": True,
+            "company_logo": None,
         },
         {
             "user": supplier_owners[1],
             "company_name": "Global Merchandise Ltd.",
             "is_active": True,
+            "company_logo": None,
         },
         {
             "user": supplier_owners[2],
             "company_name": "Premium Products Inc.",
             "is_active": True,
+            "company_logo": None,
         },
         {
             "user": supplier_owners[3],
             "company_name": "Industrial Equipment Solutions",
             "is_active": True,
+            "company_logo": None,
         },
         {
             "user": supplier_owners[4],
             "company_name": "Office Essentials Pro",
             "is_active": True,
+            "company_logo": None,
         },
         {
             "user": supplier_owners[5],
             "company_name": "Digital Devices Direct",
             "is_active": True,
+            "company_logo": None,
         },
         {
             "user": supplier_owners[6],
             "company_name": "Furniture & Fixtures Co.",
             "is_active": True,
+            "company_logo": None,
         },
         {
             "user": supplier_owners[7],
             "company_name": "Electronics Warehouse",
             "is_active": True,
+            "company_logo": None,
         },
         {
             "user": supplier_owners[8],
             "company_name": "Business Supplies Hub",
             "is_active": True,
+            "company_logo": None,
         },
         {
             "user": supplier_owners[9],
             "company_name": "Tech Accessories Plus",
             "is_active": True,
+            "company_logo": None,
         },
     ]
 
@@ -120,6 +130,7 @@ async def seed_suppliers(
                 user_id=user_obj.id,
                 company_name=company_name,
                 is_active=supplier_data["is_active"],
+                company_logo=supplier_data.get("company_logo"),
                 created_at=datetime.now(UTC),
             )
             session.add(supplier)

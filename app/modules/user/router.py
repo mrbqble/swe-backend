@@ -36,6 +36,7 @@ async def get_me(
         "created_at": current_user.created_at,
         "organization_name": None,
         "company_name": None,
+        "company_logo": None,
     }
 
     # If user is a consumer, fetch and include organization_name and profile_image
@@ -61,6 +62,7 @@ async def get_me(
         supplier = result.scalar_one_or_none()
         if supplier:
             user_data["company_name"] = supplier.company_name
+            user_data["company_logo"] = supplier.company_logo
         else:
             # Check if user is staff (manager or sales) via SupplierStaff
             # Get the supplier_id from SupplierStaff, then fetch the Supplier
@@ -76,6 +78,7 @@ async def get_me(
                 supplier = result.scalar_one_or_none()
                 if supplier:
                     user_data["company_name"] = supplier.company_name
+                    user_data["company_logo"] = supplier.company_logo
 
     return user_data
 
@@ -136,6 +139,7 @@ async def update_me(
         "organization_name": None,
         "profile_image": None,
         "company_name": None,
+        "company_logo": None,
     }
 
     # If user is a consumer, fetch and include organization_name and profile_image
@@ -160,6 +164,7 @@ async def update_me(
         supplier = result.scalar_one_or_none()
         if supplier:
             user_response["company_name"] = supplier.company_name
+            user_response["company_logo"] = supplier.company_logo
         else:
             result = await db.execute(
                 select(SupplierStaff).where(SupplierStaff.user_id == current_user.id)
@@ -172,6 +177,7 @@ async def update_me(
                 supplier = result.scalar_one_or_none()
                 if supplier:
                     user_response["company_name"] = supplier.company_name
+                    user_response["company_logo"] = supplier.company_logo
 
     return user_response
 

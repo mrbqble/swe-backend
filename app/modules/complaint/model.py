@@ -38,21 +38,23 @@ class Complaint(Base):
     sales_rep_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    manager_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    manager_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
     )
     status: Mapped[ComplaintStatus] = mapped_column(
         Enum(ComplaintStatus), default=ComplaintStatus.OPEN, nullable=False, index=True
     )
     description: Mapped[str] = mapped_column(Text, nullable=False)
     resolution: Mapped[str | None] = mapped_column(Text, nullable=True)
-    consumer_feedback: Mapped[bool | None] = mapped_column(nullable=True, default=None)
+    consumer_feedback: Mapped[bool | None] = mapped_column(
+        nullable=True, default=None)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
 
     order: Mapped[Order] = relationship("Order", back_populates="complaints")
-    consumer: Mapped[Consumer] = relationship("Consumer", back_populates="complaints")
+    consumer: Mapped[Consumer] = relationship(
+        "Consumer", back_populates="complaints")
     sales_rep: Mapped[User] = relationship(
         "User", foreign_keys=[sales_rep_id], back_populates="complaints_as_sales_rep"
     )

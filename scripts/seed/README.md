@@ -91,7 +91,7 @@ Multiple orders with various statuses:
 
 ### Other Data
 
-- **Links**: Various link statuses (pending, accepted, denied, blocked)
+- **Links**: Various link statuses (pending, accepted, denied, blocked, unlinked)
 - **Chat Sessions**: Automatically created when links are accepted (1-to-1 relationship: one consumer = one sales rep per supplier)
 - **Chat Messages**: Realistic conversation threads, including structured messages for orders and complaints
 - **Complaints**: Various complaint statuses (open, escalated, resolved)

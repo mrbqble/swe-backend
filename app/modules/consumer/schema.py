@@ -10,7 +10,7 @@ from app.modules.user.schema import UserResponse
 class ConsumerResponse(BaseModel):
     """Short consumer schema for embedding in responses."""
 
-    model_config = ConfigDict(from_attributes=True, strict=True)
+    model_config = ConfigDict(from_attributes=True, strict=False)  # Allow type coercion for nested validation
 
     id: int
     organization_name: str

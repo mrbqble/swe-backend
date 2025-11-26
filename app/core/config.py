@@ -25,7 +25,6 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
-    CORS_ORIGINS: str | list[str] = "http://localhost:3000,http://localhost:8000"
 
     # Password policy
     PASSWORD_MIN_LENGTH: int = 8
@@ -44,20 +43,6 @@ class Settings(BaseSettings):
     MAX_REQUEST_SIZE: int = 10 * 1024 * 1024  # 10MB max request body size
     MAX_STRING_LENGTH: int = 10000  # Max length for string fields
     ENABLE_DOCS_IN_PROD: bool = False  # Disable OpenAPI docs in production by default
-
-    @model_validator(mode="before")
-    @classmethod
-    def parse_cors_origins(
-        cls, values: dict[str, str | list[str]]
-    ) -> dict[str, str | list[str]]:
-        """Parse CORS origins from comma-separated string to list."""
-        if "CORS_ORIGINS" in values and isinstance(values["CORS_ORIGINS"], str):
-            values["CORS_ORIGINS"] = [
-                origin.strip()
-                for origin in values["CORS_ORIGINS"].split(",")
-                if origin.strip()
-            ]
-        return values
 
 
 settings = Settings()

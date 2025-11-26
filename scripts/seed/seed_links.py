@@ -217,6 +217,17 @@ async def seed_links(
             "supplier": suppliers["Industrial Equipment Solutions"],
             "status": LinkStatus.ACCEPTED,
         },
+        # Example of unlinked status (previously accepted, now unlinked)
+        {
+            "consumer": consumers["Retail Chain ABC"],
+            "supplier": suppliers["Industrial Equipment Solutions"],
+            "status": LinkStatus.UNLINKED,
+        },
+        {
+            "consumer": consumers["Wholesale Distributor XYZ"],
+            "supplier": suppliers["Office Essentials Pro"],
+            "status": LinkStatus.UNLINKED,
+        },
         # Retail Outlet Network links (for order seeding)
         {
             "consumer": consumers["Retail Outlet Network"],
@@ -289,10 +300,24 @@ async def seed_links(
             # Create notification for consumer when link request is created (matches backend router logic)
             if consumer.user_id:
                 supplier_name = supplier.company_name if supplier and supplier.company_name else "Supplier"
-                message = f"Your linking request to {supplier_name} has been submitted and is pending approval."
-                await create_notification(consumer.user_id, "link_request_created", message, session, entity_id=link.id, entity_type="link")
+                if link_data["status"] == LinkStatus.UNLINKED:
+                    message = f"Your link with {supplier_name} has been unlinked. You can request to link again."
+                    await create_notification(consumer.user_id, "link_unlinked", message, session, entity_id=link.id, entity_type="link")
+                elif link_data["status"] == LinkStatus.PENDING:
+                    message = f"Your linking request to {supplier_name} has been submitted and is pending approval."
+                    await create_notification(consumer.user_id, "link_request_created", message, session, entity_id=link.id, entity_type="link")
+                elif link_data["status"] == LinkStatus.ACCEPTED:
+                    # Notification will be created below after chat session is created
+                    pass
+                elif link_data["status"] == LinkStatus.DENIED:
+                    message = f"Your linking request to {supplier_name} has been declined."
+                    await create_notification(consumer.user_id, "link_denied", message, session, entity_id=link.id, entity_type="link")
+                elif link_data["status"] == LinkStatus.BLOCKED:
+                    message = f"Your link with {supplier_name} has been blocked."
+                    await create_notification(consumer.user_id, "link_blocked", message, session, entity_id=link.id, entity_type="link")
 
             # If link is accepted, automatically create chat session
+            # Note: UNLINKED links don't get chat sessions (they were previously accepted but are now unlinked)
             if link_data["status"] == LinkStatus.ACCEPTED:
                 # Assign sales rep for this consumer-supplier pair
                 sales_rep_id = await assign_sales_rep_for_link_seed(supplier_id, session, batch_chat_sessions)

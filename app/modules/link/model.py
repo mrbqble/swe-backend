@@ -21,6 +21,7 @@ class LinkStatus(enum.Enum):
     ACCEPTED = "accepted"
     DENIED = "denied"
     BLOCKED = "blocked"
+    UNLINKED = "unlinked"
 
 
 class Link(Base):
@@ -48,9 +49,12 @@ class Link(Base):
         nullable=False,
     )
 
-    consumer: Mapped[Consumer] = relationship("Consumer", back_populates="links")
-    supplier: Mapped[Supplier] = relationship("Supplier", back_populates="links")
+    consumer: Mapped[Consumer] = relationship(
+        "Consumer", back_populates="links")
+    supplier: Mapped[Supplier] = relationship(
+        "Supplier", back_populates="links")
 
     __table_args__ = (
-        UniqueConstraint("consumer_id", "supplier_id", name="uq_consumer_supplier"),
+        UniqueConstraint("consumer_id", "supplier_id",
+                         name="uq_consumer_supplier"),
     )

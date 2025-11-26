@@ -29,7 +29,7 @@ class ComplaintCreate(BaseModel):
         None, description="Sales representative user ID (auto-assigned if not provided)"
     )
     manager_id: int | None = Field(
-        None, description="Manager user ID (auto-assigned if not provided)"
+        None, description="Manager user ID (not used, kept for backward compatibility)"
     )
     description: str = Field(
         ..., min_length=1, max_length=10000, description="Complaint description"
@@ -79,7 +79,7 @@ class ComplaintResponse(BaseModel):
 
     model_config = ConfigDict(
         from_attributes=True,
-        strict=True,
+        strict=False,  # Allow None values for manager_id
         json_schema_extra={
             "example": {
                 "id": 1,
@@ -99,7 +99,7 @@ class ComplaintResponse(BaseModel):
     order_id: int
     consumer_id: int
     sales_rep_id: int
-    manager_id: int
+    manager_id: int | None
     status: ComplaintStatus
     description: str
     resolution: str | None

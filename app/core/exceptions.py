@@ -44,22 +44,28 @@ def register_exception_handlers(app: FastAPI) -> None:
         # Format errors for better readability
         formatted_errors: list[dict[str, Any]] = []
         for error in errors:
-            formatted_errors.append(
-                {
-                    "field": ".".join(str(loc) for loc in error["loc"]),
-                    "message": error["msg"],
-                    "type": error["type"],
-                }
-            )
+            error_dict = {
+                "field": ".".join(str(loc) for loc in error["loc"]),
+                "message": error["msg"],
+                "type": error["type"],
+            }
+            # Include input value if available
+            if "input" in error:
+                error_dict["input"] = str(error["input"])
+            formatted_errors.append(error_dict)
 
-        logger.warning(
-            "Validation error",
+        # Log detailed error information
+        logger.error(
+            f"Request validation error on {request.method} {request.url.path}",
             extra={
                 "correlation_id": correlation_id,
                 "path": request.url.path,
                 "method": request.method,
+                "query_params": str(request.url.query),
                 "errors": formatted_errors,
+                "full_error_details": errors,  # Include full error details
             },
+            exc_info=True,
         )
 
         return JSONResponse(
@@ -78,14 +84,32 @@ def register_exception_handlers(app: FastAPI) -> None:
         """Handle Pydantic model validation errors."""
         correlation_id = getattr(request.state, "correlation_id", None)
 
-        logger.warning(
-            "Pydantic validation error",
+        validation_errors = exc.errors()
+        # Format errors for better readability
+        formatted_errors: list[dict[str, Any]] = []
+        for error in validation_errors:
+            error_dict = {
+                "field": ".".join(str(loc) for loc in error.get("loc", [])),
+                "message": error.get("msg", "Unknown error"),
+                "type": error.get("type", "unknown"),
+            }
+            # Include input value if available
+            if "input" in error:
+                error_dict["input"] = str(error["input"])[:500]  # Limit length
+            formatted_errors.append(error_dict)
+
+        # Log detailed error information
+        logger.error(
+            f"Pydantic model validation error on {request.method} {request.url.path}",
             extra={
                 "correlation_id": correlation_id,
                 "path": request.url.path,
                 "method": request.method,
-                "errors": exc.errors(),
+                "query_params": str(request.url.query),
+                "errors": formatted_errors,
+                "full_error_details": validation_errors,  # Include full error details
             },
+            exc_info=True,
         )
 
         return JSONResponse(

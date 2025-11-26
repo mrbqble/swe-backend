@@ -1,6 +1,5 @@
 """Order management routes."""
 
-from decimal import Decimal
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query, status
@@ -13,13 +12,12 @@ from app.api.dependencies import get_current_user
 from app.core.exceptions import ApplicationError
 from app.core.roles import Role
 from app.db.session import get_db
-from app.modules.complaint.model import Complaint
 from app.modules.consumer.model import Consumer
 from app.modules.link.model import Link, LinkStatus
 from app.modules.order.model import Order, OrderItem, OrderStatus
 from app.modules.order.schema import OrderCreate, OrderResponse, OrderStatusUpdate
 from app.modules.product.model import Product
-from app.modules.supplier.model import Supplier, SupplierStaff
+from app.modules.supplier.model import Supplier
 from app.modules.user.model import User
 from app.utils.helpers import (
     assign_sales_representative,
@@ -95,7 +93,8 @@ async def create_order(
     # Validate items and calculate total
     total = 0
     order_items: list[OrderItem] = []
-    products_info: list[dict] = []  # Store product info for chat message
+    # Store product info for chat message
+    products_info: list[dict[str, Any]] = []
 
     for item_data in order_data.items:
         # Validate quantity
@@ -378,7 +377,6 @@ async def get_orders(
         # Filter by the specific consumer's ID, not by organization
         query = query.where(Order.consumer_id == consumer_id)
 
-
     # Supplier staff (owner/manager/sales): get their supplier's orders
     elif current_user.role in (
         Role.SUPPLIER_OWNER.value,
@@ -386,8 +384,10 @@ async def get_orders(
         Role.SUPPLIER_SALES.value,
     ):
         supplier_id = await get_supplier_id_for_user(current_user, db)
+
         if not supplier_id:
             raise ApplicationError("Supplier profile not found")
+
         query = query.where(Order.supplier_id == supplier_id)
 
         # Sales reps can only see orders assigned to them
@@ -397,11 +397,12 @@ async def get_orders(
         raise ApplicationError("Not enough permissions",
                                )
 
-
     # Get total count
     count_query = select(func.count(Order.id))
+
     if consumer_id is not None:
         count_query = count_query.where(Order.consumer_id == consumer_id)
+
     elif supplier_id is not None:
         count_query = count_query.where(Order.supplier_id == supplier_id)
         # Sales reps can only see orders assigned to them
@@ -421,7 +422,7 @@ async def get_orders(
     orders = result.scalars().all()
 
     # Create response with complaint information
-    order_responses = []
+    order_responses: list[dict[str, Any]] = []
     for order in orders:
         order_dict = OrderResponse.model_validate(order).model_dump()
         # Add has_complaint field

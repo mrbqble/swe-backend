@@ -1,5 +1,6 @@
 """Complaint management routes."""
 
+import logging
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query, status
@@ -22,10 +23,16 @@ from app.modules.consumer.model import Consumer
 from app.modules.order.model import Order
 from app.modules.supplier.model import Supplier, SupplierStaff
 from app.modules.user.model import User
-from app.utils.helpers import create_notification, get_consumer_by_user_id
+from app.utils.helpers import (
+    create_notification,
+    get_consumer_by_user_id,
+    get_supplier_id_for_user,
+)
 from app.utils.pagination import create_pagination_response
 
 ComplaintRouter = APIRouter(prefix="/complaints", tags=["complaints"])
+
+logger = logging.getLogger(__name__)
 
 
 def _validate_status_transition(
@@ -67,8 +74,26 @@ async def _can_access_complaint(
     if complaint.sales_rep_id == user.id:
         return True
 
-    # Manager can access complaints where they are the manager
-    return complaint.manager_id == user.id
+    # Manager/Owner can access escalated complaints from linked consumers
+    if user.role in (Role.SUPPLIER_OWNER.value, Role.SUPPLIER_MANAGER.value):
+        if complaint.status == ComplaintStatus.ESCALATED:
+            # Get supplier_id for the current user
+            supplier_id = await get_supplier_id_for_user(user, db)
+            if supplier_id:
+                # Check if consumer is linked to this supplier
+                from app.modules.link.model import Link, LinkStatus
+                result = await db.execute(
+                    select(Link).where(
+                        Link.consumer_id == complaint.consumer_id,
+                        Link.supplier_id == supplier_id,
+                        Link.status == LinkStatus.ACCEPTED
+                    )
+                )
+                link = result.scalar_one_or_none()
+                if link:
+                    return True
+
+    return False
 
 
 @ComplaintRouter.post(
@@ -101,9 +126,8 @@ async def create_complaint(
         raise ApplicationError("Order does not belong to you",
                                )
 
-    # Auto-assign sales rep and manager if not provided or if provided values are invalid
+    # Auto-assign sales rep if not provided or if provided value is invalid
     sales_rep_id = complaint_data.sales_rep_id
-    manager_id = complaint_data.manager_id
 
     # Use order's sales_rep_id if not provided
     if not sales_rep_id and order.sales_rep_id:
@@ -136,66 +160,11 @@ async def create_complaint(
                 if not result.scalar_one_or_none():
                     sales_rep_id = None  # Not associated with supplier, will auto-assign
 
-    # Validate provided manager_id if given
-    if manager_id:
-        result = await db.execute(
-            select(User).where(User.id == manager_id, User.is_active)
-        )
-        manager_user = result.scalar_one_or_none()
-        if not manager_user:
-            manager_id = None  # Invalid user, will auto-assign
-        else:
-            # Check if user is associated with supplier (as staff or owner)
-            result = await db.execute(
-                select(SupplierStaff).where(
-                    SupplierStaff.user_id == manager_id,
-                    SupplierStaff.supplier_id == order.supplier_id,
-                )
-            )
-            if not result.scalar_one_or_none():
-                # Check if it's the supplier owner
-                result = await db.execute(
-                    select(Supplier).where(
-                        Supplier.id == order.supplier_id,
-                        Supplier.user_id == manager_id,
-                    )
-                )
-                if not result.scalar_one_or_none():
-                    manager_id = None  # Not associated with supplier, will auto-assign
-
-    if not sales_rep_id or not manager_id:
-        # Get supplier staff for auto-assignment
-        # First, try to get a sales rep (with active user)
-        if not sales_rep_id:
-            # Use helper function to assign sales rep
-            from app.utils.helpers import assign_sales_representative
-            sales_rep_id = await assign_sales_representative(order.supplier_id, db)
-
-        # Get a manager or owner
-        if not manager_id:
-            # Try to find staff with "manager" in their role (case-insensitive) with active user
-            result = await db.execute(
-                select(SupplierStaff)
-                .join(User, SupplierStaff.user_id == User.id)
-                .where(SupplierStaff.supplier_id == order.supplier_id)
-                .where(SupplierStaff.staff_role.ilike("%manager%"))
-                .where(User.is_active)
-                .limit(1)
-            )
-            manager_staff = result.scalar_one_or_none()
-            if manager_staff:
-                manager_id = manager_staff.user_id
-            else:
-                # If no manager found, try to get the supplier owner (with active user)
-                result = await db.execute(
-                    select(Supplier)
-                    .join(User, Supplier.user_id == User.id)
-                    .where(Supplier.id == order.supplier_id)
-                    .where(User.is_active)
-                )
-                supplier = result.scalar_one_or_none()
-                if supplier and supplier.user_id:
-                    manager_id = supplier.user_id
+    # Auto-assign sales rep if needed
+    if not sales_rep_id:
+        # Use helper function to assign sales rep
+        from app.utils.helpers import assign_sales_representative
+        sales_rep_id = await assign_sales_representative(order.supplier_id, db)
 
     # Verify sales rep exists and is associated with supplier
     if sales_rep_id:
@@ -218,42 +187,12 @@ async def create_complaint(
         raise ApplicationError("No sales representative found for this supplier. Please contact support.",
                                )
 
-    # Verify manager exists and is associated with supplier
-    if manager_id:
-        result = await db.execute(select(User).where(User.id == manager_id))
-        manager = result.scalar_one_or_none()
-        if not manager:
-            raise ApplicationError("Manager not found")
-
-        result = await db.execute(
-            select(SupplierStaff).where(
-                SupplierStaff.user_id == manager_id,
-                SupplierStaff.supplier_id == order.supplier_id,
-            )
-        )
-        manager_staff = result.scalar_one_or_none()
-        if not manager_staff:
-            # Check if it's the supplier owner
-            result = await db.execute(
-                select(Supplier).where(
-                    Supplier.id == order.supplier_id,
-                    Supplier.user_id == manager_id,
-                )
-            )
-            supplier = result.scalar_one_or_none()
-            if not supplier:
-                raise ApplicationError(
-                    "Manager is not associated with the order's supplier")
-    else:
-        raise ApplicationError("No manager found for this supplier. Please contact support.",
-                               )
-
-    # Create complaint
+    # Create complaint (no manager_id assigned)
     complaint = Complaint(
         order_id=complaint_data.order_id,
         consumer_id=consumer.id,
         sales_rep_id=sales_rep_id,
-        manager_id=manager_id,
+        manager_id=None,  # No manager assigned
         status=ComplaintStatus.OPEN,
         description=complaint_data.description,
     )
@@ -361,6 +300,198 @@ async def create_complaint(
     return ComplaintResponse.model_validate(complaint)
 
 
+@ComplaintRouter.get(
+    "", response_model=dict[str, Any]
+)  # Will be PaginationResponse[ComplaintResponse]
+async def get_complaints(
+    current_user: Annotated[User, Depends(get_current_user)],
+    page: int = Query(1, ge=1, description="Page number"),
+    size: int = Query(20, ge=1, le=10000, description="Page size"),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Get complaints (filtered by role: consumer sees own, sales rep sees assigned, manager sees assigned).
+
+    For consumers: Filters by specific consumer_id (not by organization).
+    Each consumer is treated as a unique organization (1 consumer = 1 organization).
+    """
+    query = select(Complaint)
+
+    # Consumer: get only their own complaints (filtered by specific consumer_id, not organization)
+    # Each consumer is treated as a unique organization (1 consumer = 1 organization)
+    if current_user.role == Role.CONSUMER.value:
+        consumer = await get_consumer_by_user_id(current_user.id, db)
+        if not consumer:
+            raise ApplicationError("Consumer profile not found")
+        query = query.where(Complaint.consumer_id == consumer.id)
+
+    # Sales rep: get complaints where they are the sales rep
+    elif current_user.role in (
+        Role.SUPPLIER_OWNER.value,
+        Role.SUPPLIER_MANAGER.value,
+        Role.SUPPLIER_SALES.value,
+    ):
+        # Get supplier_id for the current user
+        supplier_id = await get_supplier_id_for_user(current_user, db)
+        if not supplier_id:
+            raise ApplicationError("Supplier profile not found for this user")
+
+        if current_user.role == Role.SUPPLIER_SALES.value:
+            # Sales rep sees complaints where they are sales_rep_id AND where the order is assigned to them
+            # Use a subquery to check order's sales_rep_id without interfering with eager loading
+            order_subquery = select(Order.id).where(
+                Order.sales_rep_id == current_user.id).scalar_subquery()
+            query = query.where(
+                (Complaint.sales_rep_id == current_user.id)
+                & (Complaint.order_id.in_(order_subquery))
+            )
+        else:
+            # Owner/Manager sees all escalated complaints from consumers linked to their supplier
+            from app.modules.link.model import Link, LinkStatus
+            # Use a subquery to get consumer_ids that have accepted links with this supplier
+            linked_consumers_subquery = select(Link.consumer_id).where(
+                Link.supplier_id == supplier_id,
+                Link.status == LinkStatus.ACCEPTED
+            )
+
+            # Filter complaints: escalated status AND consumer is linked to supplier
+            query = query.where(
+                (Complaint.status == ComplaintStatus.ESCALATED)
+                & (Complaint.consumer_id.in_(linked_consumers_subquery))
+            )
+    else:
+        raise ApplicationError("Not enough permissions",
+                               )
+
+    # Get total count
+    count_query = select(func.count(Complaint.id))
+    if current_user.role == Role.CONSUMER.value:
+        consumer = await get_consumer_by_user_id(current_user.id, db)
+        if consumer:
+            count_query = count_query.where(
+                Complaint.consumer_id == consumer.id)
+    elif current_user.role in (
+        Role.SUPPLIER_OWNER.value,
+        Role.SUPPLIER_MANAGER.value,
+        Role.SUPPLIER_SALES.value,
+    ):
+        supplier_id = await get_supplier_id_for_user(current_user, db)
+        if not supplier_id:
+            raise ApplicationError("Supplier profile not found for this user")
+
+        if current_user.role == Role.SUPPLIER_SALES.value:
+            # Filter by complaint's sales_rep_id AND ensure the order is also assigned to this sales rep
+            # Use a subquery to check order's sales_rep_id
+            order_subquery = select(Order.id).where(
+                Order.sales_rep_id == current_user.id).scalar_subquery()
+            count_query = count_query.where(
+                (Complaint.sales_rep_id == current_user.id)
+                & (Complaint.order_id.in_(order_subquery))
+            )
+        else:
+            # Owner/Manager: count escalated complaints from linked consumers
+            from app.modules.link.model import Link, LinkStatus
+            # Use a subquery to get consumer_ids that have accepted links with this supplier
+            linked_consumers_subquery = select(Link.consumer_id).where(
+                Link.supplier_id == supplier_id,
+                Link.status == LinkStatus.ACCEPTED
+            )
+
+            count_query = count_query.where(
+                (Complaint.status == ComplaintStatus.ESCALATED)
+                & (Complaint.consumer_id.in_(linked_consumers_subquery))
+            )
+
+    count_result = await db.execute(count_query)
+    total = count_result.scalar_one() or 0
+
+    # Get paginated results with relationships loaded
+    query = (
+        query.options(
+            selectinload(Complaint.order).selectinload(Order.items),
+            selectinload(Complaint.order).selectinload(Order.supplier),
+            selectinload(Complaint.order).selectinload(Order.sales_rep),
+            selectinload(Complaint.order).selectinload(
+                Order.consumer).selectinload(Consumer.user),
+            selectinload(Complaint.consumer).selectinload(Consumer.user),
+        )
+        .order_by(Complaint.created_at.desc())
+        .offset((page - 1) * size)
+        .limit(size)
+    )
+    result = await db.execute(query)
+    complaints = result.scalars().all()
+
+    # Create response
+    complaint_responses: list[ComplaintResponse] = []
+    for complaint in complaints:
+        try:
+            complaint_responses.append(
+                ComplaintResponse.model_validate(complaint))
+        except Exception as e:
+            # Log detailed error information
+            from pydantic import ValidationError
+            error_details: dict[str, Any] = {
+                "complaint_id": complaint.id,
+                "manager_id": complaint.manager_id,
+                "status": str(complaint.status) if complaint.status else None,
+                "consumer_id": complaint.consumer_id,
+                "sales_rep_id": complaint.sales_rep_id,
+                "order_id": complaint.order_id,
+            }
+
+            # Add relationship information
+            try:
+                consumer = getattr(complaint, 'consumer', None)
+                error_details["has_consumer"] = consumer is not None
+                if consumer:
+                    error_details["consumer_data"] = {
+                        "id": consumer.id,
+                        "organization_name": consumer.organization_name,
+                        "has_user": getattr(consumer, 'user', None) is not None
+                    }
+            except Exception as consumer_err:
+                error_details["consumer_error"] = f"Could not access consumer data: {consumer_err}"
+
+            try:
+                order = getattr(complaint, 'order', None)
+                error_details["has_order"] = order is not None
+                if order:
+                    error_details["order_data"] = {
+                        "id": order.id,
+                        "status": str(order.status) if hasattr(order, 'status') else None,
+                    }
+            except Exception as order_err:
+                error_details["order_error"] = f"Could not access order data: {order_err}"
+
+            if isinstance(e, ValidationError):
+                validation_errors = e.errors()
+                error_details["validation_errors"] = validation_errors
+                # Log each validation error in detail
+                for validation_error in validation_errors:
+                    logger.error(
+                        f"Validation error for complaint {complaint.id}: "
+                        f"field={'.'.join(str(loc) for loc in validation_error.get('loc', []))}, "
+                        f"type={validation_error.get('type')}, "
+                        f"message={validation_error.get('msg')}, "
+                        f"input={validation_error.get('input')}"
+                    )
+            else:
+                error_details["exception_type"] = type(e).__name__
+                error_details["exception_message"] = str(e)
+
+            logger.error(
+                f"Failed to validate complaint {complaint.id}: {e}",
+                exc_info=True,
+                extra=error_details
+            )
+            # Re-raise to see the actual error
+            raise
+
+    return create_pagination_response(
+        complaint_responses, page, size, total
+    ).model_dump()
+
+
 @ComplaintRouter.get("/{complaint_id}", response_model=ComplaintResponse)
 async def get_complaint(
     complaint_id: int,
@@ -395,114 +526,6 @@ async def get_complaint(
     return ComplaintResponse.model_validate(complaint)
 
 
-@ComplaintRouter.get(
-    "", response_model=dict
-)  # Will be PaginationResponse[ComplaintResponse]
-async def get_complaints(
-    current_user: Annotated[User, Depends(get_current_user)],
-    page: int = Query(1, ge=1, description="Page number"),
-    size: int = Query(20, ge=1, le=100, description="Page size"),
-    db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
-    """Get complaints (filtered by role: consumer sees own, sales rep sees assigned, manager sees assigned).
-
-    For consumers: Filters by specific consumer_id (not by organization).
-    Each consumer is treated as a unique organization (1 consumer = 1 organization).
-    """
-    query = select(Complaint)
-
-    # Consumer: get only their own complaints (filtered by specific consumer_id, not organization)
-    # Each consumer is treated as a unique organization (1 consumer = 1 organization)
-    if current_user.role == Role.CONSUMER.value:
-        consumer = await get_consumer_by_user_id(current_user.id, db)
-        if not consumer:
-            raise ApplicationError("Consumer profile not found")
-        query = query.where(Complaint.consumer_id == consumer.id)
-
-    # Sales rep: get complaints where they are the sales rep
-    elif current_user.role in (
-        Role.SUPPLIER_OWNER.value,
-        Role.SUPPLIER_MANAGER.value,
-        Role.SUPPLIER_SALES.value,
-    ):
-        # Sales rep sees complaints where they are sales_rep_id AND where the order is assigned to them
-        # Manager sees complaints where they are manager_id
-        # Owner/Manager can see both
-        if current_user.role == Role.SUPPLIER_SALES.value:
-            # Filter by complaint's sales_rep_id AND ensure the order is also assigned to this sales rep
-            # Use a subquery to check order's sales_rep_id without interfering with eager loading
-            order_subquery = select(Order.id).where(
-                Order.sales_rep_id == current_user.id).scalar_subquery()
-            query = query.where(
-                (Complaint.sales_rep_id == current_user.id)
-                & (Complaint.order_id.in_(order_subquery))
-            )
-        else:
-            # Owner/Manager can see complaints where they are manager or sales rep
-            query = query.where(
-                (Complaint.manager_id == current_user.id)
-                | (Complaint.sales_rep_id == current_user.id)
-            )
-    else:
-        raise ApplicationError("Not enough permissions",
-                               )
-
-    # Get total count
-    count_query = select(func.count(Complaint.id))
-    if current_user.role == Role.CONSUMER.value:
-        consumer = await get_consumer_by_user_id(current_user.id, db)
-        if consumer:
-            count_query = count_query.where(
-                Complaint.consumer_id == consumer.id)
-    elif current_user.role in (
-        Role.SUPPLIER_OWNER.value,
-        Role.SUPPLIER_MANAGER.value,
-        Role.SUPPLIER_SALES.value,
-    ):
-        if current_user.role == Role.SUPPLIER_SALES.value:
-            # Filter by complaint's sales_rep_id AND ensure the order is also assigned to this sales rep
-            # Use a subquery to check order's sales_rep_id
-            order_subquery = select(Order.id).where(
-                Order.sales_rep_id == current_user.id).scalar_subquery()
-            count_query = count_query.where(
-                (Complaint.sales_rep_id == current_user.id)
-                & (Complaint.order_id.in_(order_subquery))
-            )
-        else:
-            count_query = count_query.where(
-                (Complaint.manager_id == current_user.id)
-                | (Complaint.sales_rep_id == current_user.id)
-            )
-
-    count_result = await db.execute(count_query)
-    total = count_result.scalar_one() or 0
-
-    # Get paginated results with relationships loaded
-    query = (
-        query.options(
-            selectinload(Complaint.order).selectinload(Order.items),
-            selectinload(Complaint.order).selectinload(Order.supplier),
-            selectinload(Complaint.order).selectinload(Order.sales_rep),
-            selectinload(Complaint.order).selectinload(
-                Order.consumer).selectinload(Consumer.user),
-            selectinload(Complaint.consumer).selectinload(Consumer.user),
-        )
-        .order_by(Complaint.created_at.desc())
-        .offset((page - 1) * size)
-        .limit(size)
-    )
-    result = await db.execute(query)
-    complaints = result.scalars().all()
-
-    # Create response
-    complaint_responses = [
-        ComplaintResponse.model_validate(complaint) for complaint in complaints
-    ]
-    return create_pagination_response(
-        complaint_responses, page, size, total
-    ).model_dump()
-
-
 @ComplaintRouter.patch("/{complaint_id}/status", response_model=ComplaintResponse)
 async def update_complaint_status(
     complaint_id: int,
@@ -528,12 +551,34 @@ async def update_complaint_status(
         raise ApplicationError("Complaint not found",
                                )
 
-    # Check user is the sales rep or manager for this complaint
+    # Check permissions: sales rep can update their own complaints
+    # Manager/Owner can update escalated complaints from linked consumers
     is_sales_rep = complaint.sales_rep_id == current_user.id
-    is_manager = complaint.manager_id == current_user.id
 
-    if not (is_sales_rep or is_manager):
-        raise ApplicationError("You are not the sales representative or manager for this complaint",
+    can_update = False
+    if is_sales_rep:
+        can_update = True
+    elif current_user.role in (Role.SUPPLIER_OWNER.value, Role.SUPPLIER_MANAGER.value):
+        # Manager/Owner can update escalated complaints from linked consumers
+        if complaint.status == ComplaintStatus.ESCALATED:
+            # Get supplier_id for the current user
+            supplier_id = await get_supplier_id_for_user(current_user, db)
+            if supplier_id:
+                # Check if consumer is linked to this supplier
+                from app.modules.link.model import Link, LinkStatus
+                result = await db.execute(
+                    select(Link).where(
+                        Link.consumer_id == complaint.consumer_id,
+                        Link.supplier_id == supplier_id,
+                        Link.status == LinkStatus.ACCEPTED
+                    )
+                )
+                link = result.scalar_one_or_none()
+                if link:
+                    can_update = True
+
+    if not can_update:
+        raise ApplicationError("You do not have permission to update this complaint",
                                )
 
     # Validate state transition
@@ -605,9 +650,8 @@ async def update_complaint_status(
         }
         message_text = status_messages.get(status_update.status)
         if message_text:
-            # Determine sender: if escalated/resolved by manager, use manager_id; otherwise use sales_rep_id
-            # This ensures the message appears from the person who took the action
-            sender_id = current_user.id  # Use the current user who is performing the action
+            # Use the current user who is performing the action as the sender
+            sender_id = current_user.id
             complaint_status_message = ChatMessage(
                 session_id=chat_session.id,
                 sender_id=sender_id,
@@ -763,19 +807,12 @@ async def submit_consumer_feedback(
         db.add(feedback_message)
         await db.commit()
 
-    # Create notification for sales rep/manager when feedback is submitted
+    # Create notification for sales rep when feedback is submitted
     # Notify the sales rep assigned to this complaint
     if complaint.sales_rep_id:
         feedback_text = "satisfied" if feedback.satisfied else "not satisfied"
         message = f"Consumer has provided feedback on Complaint #{complaint.id}: {feedback_text} with the resolution."
         await create_notification(complaint.sales_rep_id, "complaint_feedback", message, db, entity_id=complaint.order_id, entity_type="order")
-        await db.commit()
-
-    # Also notify manager if different from sales rep
-    if complaint.manager_id and complaint.manager_id != complaint.sales_rep_id:
-        feedback_text = "satisfied" if feedback.satisfied else "not satisfied"
-        message = f"Consumer has provided feedback on Complaint #{complaint.id}: {feedback_text} with the resolution."
-        await create_notification(complaint.manager_id, "complaint_feedback", message, db, entity_id=complaint.order_id, entity_type="order")
         await db.commit()
 
     # Reload complaint with relationships
@@ -910,15 +947,10 @@ async def reopen_complaint(
         db.add(reopen_message)
         await db.commit()
 
-    # Create notifications for sales rep and manager when complaint is reopened
+    # Create notification for sales rep when complaint is reopened
     if complaint.sales_rep_id:
         message = f"Complaint #{complaint.id} for Order #{complaint.order_id} has been reopened by the consumer."
         await create_notification(complaint.sales_rep_id, "complaint_reopened", message, db, entity_id=complaint.order_id, entity_type="order")
-        await db.commit()
-
-    if complaint.manager_id and complaint.manager_id != complaint.sales_rep_id:
-        message = f"Complaint #{complaint.id} for Order #{complaint.order_id} has been reopened by the consumer."
-        await create_notification(complaint.manager_id, "complaint_reopened", message, db, entity_id=complaint.order_id, entity_type="order")
         await db.commit()
 
     # Reload complaint with relationships
