@@ -68,4 +68,4 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 USER appuser
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "app"]

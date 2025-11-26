@@ -6,6 +6,7 @@ from decimal import Decimal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.modules.order.model import OrderStatus
+from app.modules.user.schema import UserResponse
 
 
 class OrderItemCreate(BaseModel):
@@ -113,6 +114,7 @@ class OrderResponse(BaseModel):
                 "id": 1,
                 "supplier_id": 1,
                 "consumer_id": 1,
+                "sales_rep_id": 3,
                 "status": "pending",
                 "total_kzt": "75000.00",
                 "created_at": "2024-01-15T10:30:00Z",
@@ -132,6 +134,7 @@ class OrderResponse(BaseModel):
     id: int = Field(..., description="Order ID")
     supplier_id: int = Field(..., description="Supplier ID")
     consumer_id: int = Field(..., description="Consumer ID")
+    sales_rep_id: int = Field(..., description="Sales representative user ID")
     status: OrderStatus = Field(..., description="Order status")
     total_kzt: Decimal = Field(..., description="Total amount in KZT")
     created_at: datetime = Field(..., description="Creation timestamp")
@@ -140,3 +143,4 @@ class OrderResponse(BaseModel):
     )
     supplier: SupplierInfo | None = Field(None, description="Supplier information")
     consumer: ConsumerInfo | None = Field(None, description="Consumer information")
+    sales_rep: UserResponse | None = Field(None, description="Sales representative information")

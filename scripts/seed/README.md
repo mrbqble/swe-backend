@@ -54,7 +54,6 @@ Note: When running individual scripts, they will attempt to seed their dependenc
 ### Users
 
 The seeding creates users with various roles:
-- **Admin**: `admin@example.com` / `Admin123!`
 - **Supplier Owners**: `supplier1@example.com`, `supplier2@example.com`, `supplier3@example.com` / `Supplier123!`
 - **Supplier Managers**: `manager1@example.com`, `manager2@example.com` / `Manager123!`
 - **Supplier Sales Reps**: `sales1@example.com`, `sales2@example.com`, `sales3@example.com` / `Sales123!`

@@ -6,7 +6,6 @@ import enum
 class Role(str, enum.Enum):
     """User roles for role-based access control."""
 
-    ADMIN = "admin"
     CONSUMER = "consumer"
     SUPPLIER_OWNER = "supplier_owner"
     SUPPLIER_MANAGER = "supplier_manager"

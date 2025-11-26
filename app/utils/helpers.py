@@ -57,3 +57,63 @@ async def is_supplier_owner_or_manager(
             return True
 
     return False
+
+
+async def assign_sales_representative(
+    supplier_id: int, db: AsyncSession
+) -> int:
+    """
+    Assign a sales representative to a supplier.
+
+    Priority:
+    1. Active sales representative (staff_role contains "sales")
+    2. Any active staff member
+    3. Supplier owner as fallback
+
+    Returns:
+        User ID of the assigned sales representative
+
+    Raises:
+        ApplicationError: If no sales representative can be found
+    """
+    from app.core.exceptions import ApplicationError
+
+    # Try to find a sales rep for this supplier
+    result = await db.execute(
+        select(SupplierStaff)
+        .join(User, SupplierStaff.user_id == User.id)
+        .where(SupplierStaff.supplier_id == supplier_id)
+        .where(SupplierStaff.staff_role.ilike("%sales%"))
+        .where(User.is_active)
+        .limit(1)
+    )
+    sales_rep_staff = result.scalar_one_or_none()
+    if sales_rep_staff:
+        return sales_rep_staff.user_id
+
+    # If no sales rep found, try to get any active staff member
+    result = await db.execute(
+        select(SupplierStaff)
+        .join(User, SupplierStaff.user_id == User.id)
+        .where(SupplierStaff.supplier_id == supplier_id)
+        .where(User.is_active)
+        .limit(1)
+    )
+    sales_rep_staff = result.scalar_one_or_none()
+    if sales_rep_staff:
+        return sales_rep_staff.user_id
+
+    # Last resort: try to get the supplier owner
+    result = await db.execute(
+        select(Supplier)
+        .join(User, Supplier.user_id == User.id)
+        .where(Supplier.id == supplier_id)
+        .where(User.is_active)
+    )
+    supplier = result.scalar_one_or_none()
+    if supplier and supplier.user_id:
+        return supplier.user_id
+
+    raise ApplicationError(
+        "No sales representative found for this supplier. Please contact support."
+    )

@@ -1,6 +1,8 @@
 """Supplier routes."""
 
 from typing import Any
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,8 +13,16 @@ from app.core.exceptions import ApplicationError
 from app.core.roles import Role
 from app.db.session import get_db
 from app.modules.supplier.model import Supplier, SupplierStaff
-from app.modules.supplier.schema import SupplierResponse, SupplierUpdate
+from app.modules.supplier.schema import (
+    StaffCreateRequest,
+    StaffResponse,
+    SupplierResponse,
+    SupplierUpdate,
+)
 from app.modules.user.model import User
+from app.utils.helpers import get_user_by_email
+from app.utils.hashing import hash_password
+from app.utils.password_policy import validate_password_policy
 
 SupplierRouter = APIRouter(prefix="/suppliers", tags=["suppliers"])
 
@@ -168,13 +178,17 @@ async def get_supplier_staff(
     ]
 
 
-@SupplierRouter.post("/staff")
+@SupplierRouter.post("/staff", response_model=StaffResponse)
 async def create_supplier_staff(
-    _staff_data: dict[str, Any],
+    staff_data: StaffCreateRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Create a new staff member for current supplier."""
+    """
+    Create a new staff member (manager or sales rep) for current supplier.
+
+    Only supplier owners can create staff members through the web app.
+    """
     if current_user.role != Role.SUPPLIER_OWNER:
         raise ApplicationError("Only supplier owners can create staff members")
 
@@ -186,12 +200,59 @@ async def create_supplier_staff(
     if not supplier:
         raise ApplicationError("Supplier profile not found")
 
-    # Create user first (this would typically be done via auth endpoint)
-    # For now, we'll assume the user already exists and we're just linking them
-    # In a real implementation, you'd create the user via the auth endpoint
-    # and then create the SupplierStaff record
+    # Check if user already exists
+    existing_user = await get_user_by_email(staff_data.email, db)
+    if existing_user:
+        raise ApplicationError("User with this email already exists")
 
-    return {"message": "Staff member creation should be done via user registration"}
+    # Validate password policy
+    try:
+        validate_password_policy(staff_data.password)
+    except ValueError as e:
+        raise ApplicationError(str(e))
+
+    # Determine user role based on staff_role
+    if staff_data.staff_role == "manager":
+        user_role = Role.SUPPLIER_MANAGER.value
+    elif staff_data.staff_role == "sales":
+        user_role = Role.SUPPLIER_SALES.value
+    else:
+        raise ApplicationError(f"Invalid staff role: {staff_data.staff_role}")
+
+    # Create user
+    password_hash = hash_password(staff_data.password)
+    user = User(
+        email=staff_data.email,
+        password_hash=password_hash,
+        first_name=staff_data.first_name,
+        last_name=staff_data.last_name,
+        role=user_role,
+    )
+    db.add(user)
+    await db.flush()
+
+    # Create SupplierStaff relationship
+    staff = SupplierStaff(
+        user_id=user.id,
+        supplier_id=supplier.id,
+        staff_role=staff_data.staff_role,
+        created_at=datetime.now(UTC),
+    )
+    db.add(staff)
+    await db.commit()
+    await db.refresh(staff)
+    await db.refresh(user)
+
+    return StaffResponse(
+        id=staff.id,
+        user_id=user.id,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        email=user.email,
+        role=staff.staff_role,
+        is_active=user.is_active,
+        created_at=staff.created_at,
+    )
 
 
 @SupplierRouter.delete("/staff/{staff_id}")

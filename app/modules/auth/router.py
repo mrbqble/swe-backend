@@ -3,9 +3,10 @@
 import contextlib
 import logging
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.dependencies import is_mobile_client
 from app.core.exceptions import ApplicationError
 from app.core.roles import Role
 from app.core.security import (
@@ -56,6 +57,7 @@ def _create_tokens(user: User) -> TokenResponse:
 )
 async def signup(
     request: SignupRequest,
+    http_request: Request,
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -63,12 +65,26 @@ async def signup(
 
     **Role Requirements:** None (public endpoint)
 
+    **Client Restrictions:**
+    - Mobile app: Only consumers can sign up
+    - Web app: Only supplier owners can sign up
+
     **Password Policy:**
     - Minimum 8 characters
     - At least one uppercase letter
     - At least one lowercase letter
     - At least one digit
     """
+    is_mobile = is_mobile_client(http_request)
+
+    # Mobile app: Only consumers can sign up
+    if is_mobile and request.role != Role.CONSUMER:
+        raise ApplicationError("Only consumers can sign up through the mobile app")
+
+    # Web app: Only supplier owners can sign up
+    if not is_mobile and request.role != Role.SUPPLIER_OWNER:
+        raise ApplicationError("Only supplier owners can sign up through the web app")
+
     existing_user = await get_user_by_email(request.email, db)
 
     if existing_user:
@@ -141,12 +157,17 @@ async def signup(
 )
 async def login(
     request: LoginRequest,
+    http_request: Request,
     db: AsyncSession = Depends(get_db),
 ):
     """
     Authenticate user and return tokens.
 
     **Role Requirements:** None (public endpoint)
+
+    **Client Restrictions:**
+    - Mobile app: Only consumers and sales representatives can login
+    - Web app: Only supplier owners, managers, and sales representatives can login
 
     Returns JWT tokens with role-based scopes for API access.
     """
@@ -157,6 +178,18 @@ async def login(
         raise ApplicationError("Incorrect email or password")
     if not user.is_active:
         raise ApplicationError("User account is inactive")
+
+    is_mobile = is_mobile_client(http_request)
+
+    # Mobile app: Only consumers and sales representatives can login
+    if is_mobile:
+        if user.role not in [Role.CONSUMER.value, Role.SUPPLIER_SALES.value]:
+            raise ApplicationError("Only consumers and sales representatives can login through the mobile app")
+    else:
+        # Web app: Only supplier owners, managers, and sales representatives can login
+        if user.role not in [Role.SUPPLIER_OWNER.value, Role.SUPPLIER_MANAGER.value, Role.SUPPLIER_SALES.value]:
+            raise ApplicationError("Only supplier owners, managers, and sales representatives can login through the web app")
+
     return _create_tokens(user)
 
 
@@ -172,12 +205,17 @@ async def login(
 )
 async def refresh(
     request: RefreshRequest,
+    http_request: Request,
     db: AsyncSession = Depends(get_db),
 ):
     """
     Refresh access token using refresh token.
 
     **Role Requirements:** None (public endpoint, requires valid refresh token)
+
+    **Client Restrictions:**
+    - Mobile app: Only consumers and sales representatives can refresh tokens
+    - Web app: Only supplier owners, managers, and sales representatives can refresh tokens
     """
     payload = decode_refresh_token(request.refresh_token)
     if payload is None or (user_id := payload.get("sub")) is None:
@@ -185,4 +223,16 @@ async def refresh(
     user = await get_user_by_id(user_id, db)
     if not user or not user.is_active:
         raise ApplicationError("User not found or inactive")
+
+    is_mobile = is_mobile_client(http_request)
+
+    # Mobile app: Only consumers and sales representatives can refresh tokens
+    if is_mobile:
+        if user.role not in [Role.CONSUMER.value, Role.SUPPLIER_SALES.value]:
+            raise ApplicationError("Only consumers and sales representatives can refresh tokens through the mobile app")
+    else:
+        # Web app: Only supplier owners, managers, and sales representatives can refresh tokens
+        if user.role not in [Role.SUPPLIER_OWNER.value, Role.SUPPLIER_MANAGER.value, Role.SUPPLIER_SALES.value]:
+            raise ApplicationError("Only supplier owners, managers, and sales representatives can refresh tokens through the web app")
+
     return _create_tokens(user)

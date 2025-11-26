@@ -58,12 +58,6 @@ def create_access_token(
 def _get_role_scopes(role: str) -> list[str]:
     """Get default scopes for a role."""
     role_scope_map = {
-        Role.ADMIN.value: [
-            "read:all",
-            "write:all",
-            "admin:users",
-            "admin:suppliers",
-        ],
         Role.CONSUMER.value: [
             "read:own_orders",
             "write:own_orders",
@@ -122,7 +116,7 @@ def verify_token_scope(payload: dict[str, Any], required_scope: str) -> bool:
         prefix = required_scope.split("*")[0]
         return any(scope.startswith(prefix) for scope in scopes)
 
-    # Check if 'read:all' or 'write:all' is present for admin-like access
+    # Check if 'read:all' or 'write:all' is present for broad access permissions
     if required_scope.startswith("read:") and "read:all" in scopes:
         return True
 

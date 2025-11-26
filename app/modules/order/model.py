@@ -61,6 +61,9 @@ class Order(Base):
     consumer_id: Mapped[int] = mapped_column(
         ForeignKey("consumers.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    sales_rep_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     status: Mapped[OrderStatus] = mapped_column(
         Enum(OrderStatus), default=OrderStatus.PENDING, nullable=False, index=True
     )
@@ -71,6 +74,9 @@ class Order(Base):
 
     supplier: Mapped[Supplier] = relationship("Supplier", back_populates="orders")
     consumer: Mapped[Consumer] = relationship("Consumer", back_populates="orders")
+    sales_rep: Mapped["User"] = relationship(
+        "User", foreign_keys=[sales_rep_id], back_populates="orders_as_sales_rep"
+    )
     items: Mapped[list[OrderItem]] = relationship(
         "OrderItem", back_populates="order", cascade="all, delete-orphan"
     )

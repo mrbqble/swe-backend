@@ -25,15 +25,6 @@ async def seed_users(session: AsyncSession) -> dict[str, User]:
     existing_users = {user.email: user for user in result.scalars().all()}
 
     users_data = [
-        # Admin
-        {
-            "email": "admin@example.com",
-            "password_hash": hash_password("Admin123!"),
-            "first_name": "Admin",
-            "last_name": "User",
-            "role": Role.ADMIN,
-            "is_active": True,
-        },
         # Supplier Owners
         {
             "email": "supplier1@example.com",

@@ -101,6 +101,10 @@ async def create_complaint(
     sales_rep_id = complaint_data.sales_rep_id
     manager_id = complaint_data.manager_id
 
+    # Use order's sales_rep_id if not provided
+    if not sales_rep_id and order.sales_rep_id:
+        sales_rep_id = order.sales_rep_id
+
     # Validate provided sales_rep_id if given
     if sales_rep_id:
         result = await db.execute(
@@ -118,7 +122,15 @@ async def create_complaint(
         )
     )
             if not result.scalar_one_or_none():
-                sales_rep_id = None  # Not associated with supplier, will auto-assign
+                # Also check if it's the supplier owner
+                result = await db.execute(
+                    select(Supplier).where(
+                        Supplier.id == order.supplier_id,
+                        Supplier.user_id == sales_rep_id,
+            )
+        )
+                if not result.scalar_one_or_none():
+                    sales_rep_id = None  # Not associated with supplier, will auto-assign
 
     # Validate provided manager_id if given
     if manager_id:
@@ -151,29 +163,9 @@ async def create_complaint(
         # Get supplier staff for auto-assignment
         # First, try to get a sales rep (with active user)
         if not sales_rep_id:
-            result = await db.execute(
-                select(SupplierStaff)
-                .join(User, SupplierStaff.user_id == User.id)
-                .where(SupplierStaff.supplier_id == order.supplier_id)
-                .where(SupplierStaff.staff_role.ilike("%sales%"))
-                .where(User.is_active)
-                .limit(1)
-    )
-            sales_rep_staff = result.scalar_one_or_none()
-            if sales_rep_staff:
-                sales_rep_id = sales_rep_staff.user_id
-            else:
-                # If no sales rep found, try to get any active staff member
-                result = await db.execute(
-                    select(SupplierStaff)
-                    .join(User, SupplierStaff.user_id == User.id)
-                    .where(SupplierStaff.supplier_id == order.supplier_id)
-                    .where(User.is_active)
-                    .limit(1)
-        )
-                sales_rep_staff = result.scalar_one_or_none()
-                if sales_rep_staff:
-                    sales_rep_id = sales_rep_staff.user_id
+            # Use helper function to assign sales rep
+            from app.utils.helpers import assign_sales_representative
+            sales_rep_id = await assign_sales_representative(order.supplier_id, db)
 
         # Get a manager or owner
         if not manager_id:

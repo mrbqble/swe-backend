@@ -116,53 +116,18 @@ async def create_chat_session(
         if order.consumer_id != consumer.id:
             raise ApplicationError("Order does not belong to you")
 
-    # Auto-assign sales rep if not provided and order_id is given
+    # Auto-assign sales rep if not provided
     if not sales_rep_id:
-        if not order:
+        if order and order.sales_rep_id:
+            # Use the sales rep assigned to the order
+            sales_rep_id = order.sales_rep_id
+        elif order:
+            # Fallback: assign using helper function (shouldn't happen if order was created correctly)
+            from app.utils.helpers import assign_sales_representative
+            sales_rep_id = await assign_sales_representative(order.supplier_id, db)
+        else:
             raise ApplicationError(
                 "Either sales_rep_id or order_id must be provided")
-
-        # Get supplier from order
-        supplier_id = order.supplier_id
-
-        # Try to find a sales rep for this supplier
-        result = await db.execute(
-            select(SupplierStaff)
-            .join(User, SupplierStaff.user_id == User.id)
-            .where(SupplierStaff.supplier_id == supplier_id)
-            .where(SupplierStaff.staff_role.ilike("%sales%"))
-            .where(User.is_active)
-            .limit(1)
-        )
-        sales_rep_staff = result.scalar_one_or_none()
-        if sales_rep_staff:
-            sales_rep_id = sales_rep_staff.user_id
-        else:
-            # If no sales rep found, try to get any active staff member
-            result = await db.execute(
-                select(SupplierStaff)
-                .join(User, SupplierStaff.user_id == User.id)
-                .where(SupplierStaff.supplier_id == supplier_id)
-                .where(User.is_active)
-                .limit(1)
-            )
-            sales_rep_staff = result.scalar_one_or_none()
-            if sales_rep_staff:
-                sales_rep_id = sales_rep_staff.user_id
-            else:
-                # Last resort: try to get the supplier owner
-                result = await db.execute(
-                    select(Supplier)
-                    .join(User, Supplier.user_id == User.id)
-                    .where(Supplier.id == supplier_id)
-                    .where(User.is_active)
-                )
-                supplier = result.scalar_one_or_none()
-                if supplier and supplier.user_id:
-                    sales_rep_id = supplier.user_id
-                else:
-                    raise ApplicationError(
-                        "No sales representative found for this supplier. Please contact support.")
 
     # Verify sales rep exists and is a valid user
     result = await db.execute(select(User).where(User.id == sales_rep_id))

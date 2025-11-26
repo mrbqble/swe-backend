@@ -19,6 +19,7 @@ from app.modules.product.model import Product
 from app.modules.supplier.model import Supplier, SupplierStaff
 from app.modules.user.model import User
 from app.utils.helpers import (
+    assign_sales_representative,
     get_consumer_by_user_id,
     get_supplier_by_user_id,
     is_supplier_owner_or_manager,
@@ -123,10 +124,14 @@ async def create_order(
 )
         order_items.append(order_item)
 
+    # Assign sales representative automatically
+    sales_rep_id = await assign_sales_representative(order_data.supplier_id, db)
+
     # Create order
     order = Order(
         supplier_id=order_data.supplier_id,
         consumer_id=consumer.id,
+        sales_rep_id=sales_rep_id,
         status=OrderStatus.PENDING,
         total_kzt=total,
     )
@@ -141,14 +146,15 @@ async def create_order(
     await db.commit()
     await db.refresh(order)
 
-    # Load items, supplier, and consumer for response
+    # Load items, supplier, consumer, and sales_rep for response
     result = await db.execute(
         select(Order)
         .options(
             selectinload(Order.items),
             joinedload(Order.supplier).joinedload(Supplier.user),
             joinedload(Order.consumer).joinedload(Consumer.user),
-)
+            joinedload(Order.sales_rep),
+        )
         .where(Order.id == order.id)
     )
     order = result.scalar_one()
@@ -163,14 +169,15 @@ async def get_order(
     db: AsyncSession = Depends(get_db),
 ) -> OrderResponse:
     """Get a single order (consumer or supplier staff)."""
-    # Get order with items, supplier, and consumer
+    # Get order with items, supplier, consumer, and sales_rep
     result = await db.execute(
         select(Order)
         .options(
             selectinload(Order.items),
             joinedload(Order.supplier).joinedload(Supplier.user),
             joinedload(Order.consumer).joinedload(Consumer.user),
-)
+            joinedload(Order.sales_rep),
+        )
         .where(Order.id == order_id)
     )
     order = result.scalar_one_or_none()
@@ -213,6 +220,7 @@ async def get_orders(
         selectinload(Order.items),
         joinedload(Order.supplier).joinedload(Supplier.user),
         joinedload(Order.consumer).joinedload(Consumer.user),
+        joinedload(Order.sales_rep),
     )
     consumer_id: int | None = None
     supplier_id: int | None = None
@@ -348,14 +356,15 @@ async def update_order_status(
     await db.commit()
     await db.refresh(order)
 
-    # Reload with items, supplier, and consumer
+    # Reload with items, supplier, consumer, and sales_rep
     result = await db.execute(
         select(Order)
         .options(
             selectinload(Order.items),
             joinedload(Order.supplier).joinedload(Supplier.user),
             joinedload(Order.consumer).joinedload(Consumer.user),
-)
+            joinedload(Order.sales_rep),
+        )
         .where(Order.id == order.id)
     )
     order = result.scalar_one()

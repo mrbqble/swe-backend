@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from app.modules.complaint.model import Complaint
     from app.modules.consumer.model import Consumer
     from app.modules.notification.model import Notification
+    from app.modules.order.model import Order
     from app.modules.supplier.model import Supplier, SupplierStaff
 
 
@@ -56,6 +57,9 @@ class User(Base):
     )
     complaints_as_manager: Mapped[list[Complaint]] = relationship(
         "Complaint", foreign_keys="Complaint.manager_id", back_populates="manager"
+    )
+    orders_as_sales_rep: Mapped[list[Order]] = relationship(
+        "Order", foreign_keys="Order.sales_rep_id", back_populates="sales_rep"
     )
     notifications: Mapped[list[Notification]] = relationship(
         "Notification", back_populates="recipient"

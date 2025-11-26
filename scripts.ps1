@@ -121,7 +121,7 @@ switch ($Command.ToLower()) {
         Write-Host "[*] Starting development server..." -ForegroundColor Green
         Write-Host "   Server will be available at http://localhost:8000" -ForegroundColor Cyan
         Write-Host "   API docs: http://localhost:8000/docs" -ForegroundColor Cyan
-        uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+        uvicorn app.main:app --reload --reload-dir app --host 0.0.0.0 --port 8000
     }
 
     "start" {

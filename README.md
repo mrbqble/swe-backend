@@ -117,8 +117,8 @@ python -m alembic upgrade head
 #### 4. Start Server
 
 ```bash
-# Development mode (with hot reload)
-python -m uvicorn app.main:app --reload
+# Development mode (with hot reload, watches only app folder)
+python -m uvicorn app.main:app --reload --reload-dir app
 ```
 
 **Server:** http://localhost:8000 **API Docs:** http://localhost:8000/docs **ReDoc:** http://localhost:8000/redoc
@@ -252,8 +252,8 @@ All endpoints are prefixed with `/api/v1`.
 ### Commands
 
 ```bash
-# Development server (hot reload)
-python -m uvicorn app.main:app --reload
+# Development server (hot reload, watches only app folder)
+python -m uvicorn app.main:app --reload --reload-dir app
 
 
 # Create migration
@@ -309,7 +309,6 @@ swe-backend/
 - **supplier_owner**: Owners of supplier businesses
 - **supplier_manager**: Managers within supplier organizations
 - **supplier_sales**: Sales representatives for suppliers
-- **admin**: System administrators
 
 ## 📝 API Standards
 
