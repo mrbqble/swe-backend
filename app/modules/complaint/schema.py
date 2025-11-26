@@ -40,7 +40,9 @@ class ComplaintStatusUpdate(BaseModel):
     """Complaint status update request schema."""
 
     model_config = ConfigDict(
-        strict=True,
+        # Do not use strict=True here so that string values like "resolved"
+        # from JSON are coerced into the ComplaintStatus enum by Pydantic.
+        strict=False,
         json_schema_extra={
             "example": {
                 "status": "resolved",
@@ -106,5 +108,6 @@ class ComplaintResponse(BaseModel):
         description="Consumer feedback: true=satisfied, false=not satisfied, null=no feedback",
     )
     created_at: datetime
-    consumer: ConsumerResponse | None = Field(None, description="Consumer information")
+    consumer: ConsumerResponse | None = Field(
+        None, description="Consumer information")
     order: OrderResponse | None = Field(None, description="Order information")

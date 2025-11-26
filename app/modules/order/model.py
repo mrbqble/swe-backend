@@ -11,7 +11,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
 if TYPE_CHECKING:
-    from app.modules.chat.model import ChatSession
+    from app.modules.user.model import User
     from app.modules.complaint.model import Complaint
     from app.modules.consumer.model import Consumer
     from app.modules.product.model import Product
@@ -36,7 +36,8 @@ class OrderItem(Base):
     )
 
     order: Mapped[Order] = relationship("Order", back_populates="items")
-    product: Mapped[Product] = relationship("Product", back_populates="order_items")
+    product: Mapped[Product] = relationship(
+        "Product", back_populates="order_items")
 
 
 class OrderStatus(enum.Enum):
@@ -67,14 +68,17 @@ class Order(Base):
     status: Mapped[OrderStatus] = mapped_column(
         Enum(OrderStatus), default=OrderStatus.PENDING, nullable=False, index=True
     )
-    total_kzt: Mapped[Decimal] = mapped_column(Numeric[Decimal](10, 2), nullable=False)
+    total_kzt: Mapped[Decimal] = mapped_column(
+        Numeric[Decimal](10, 2), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
 
-    supplier: Mapped[Supplier] = relationship("Supplier", back_populates="orders")
-    consumer: Mapped[Consumer] = relationship("Consumer", back_populates="orders")
-    sales_rep: Mapped["User"] = relationship(
+    supplier: Mapped[Supplier] = relationship(
+        "Supplier", back_populates="orders")
+    consumer: Mapped[Consumer] = relationship(
+        "Consumer", back_populates="orders")
+    sales_rep: Mapped[User] = relationship(
         "User", foreign_keys=[sales_rep_id], back_populates="orders_as_sales_rep"
     )
     items: Mapped[list[OrderItem]] = relationship(

@@ -241,7 +241,7 @@ async def get_products(
     "/me",
     response_model=dict,  # PaginationResponse[ProductResponse]
     summary="Get my products",
-    description="Get paginated list of products for the authenticated supplier (owner/manager only).",
+    description="Get paginated list of products for the authenticated supplier (owner/manager/sales rep).",
     responses={
         200: {"description": "Products retrieved successfully"},
         403: {"description": "Insufficient permissions"},
@@ -253,23 +253,27 @@ async def get_my_products(
     page: int = Query(1, ge=1, description="Page number (starts at 1)"),
     size: int = Query(20, ge=1, le=100, description="Page size (max 100)"),
     is_active: bool | None = Query(None, description="Filter by active status"),
+    q: str | None = Query(None, description="Search query for product name, description, or SKU"),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
     Get products for the authenticated supplier.
 
-    **Role Requirements:** supplier_owner, supplier_manager
+    **Role Requirements:** supplier_owner, supplier_manager, supplier_sales
 
     **Pagination:** Results are paginated with max page size of 100.
+
+    **Search:** Supports search by product name, description, or SKU via 'q' parameter.
     """
-    # Check user is supplier owner or manager
+    # Check user is supplier staff (owner, manager, or sales rep)
     if current_user.role not in (
         Role.SUPPLIER_OWNER.value,
         Role.SUPPLIER_MANAGER.value,
+        Role.SUPPLIER_SALES.value,
     ):
         raise ApplicationError("Not enough permissions")
 
-    # Get supplier ID for user
+    # Get supplier ID for user (works for owner, manager, and sales rep)
     supplier_id = await get_supplier_id_for_user(current_user, db)
     if not supplier_id:
         raise ApplicationError("Supplier profile not found")
@@ -279,12 +283,28 @@ async def get_my_products(
     if is_active is not None:
         query = query.where(Product.is_active == is_active)
 
+    # Add search filter if query provided
+    if q:
+        search_term = f"%{q}%"
+        query = query.where(
+            (Product.name.ilike(search_term))
+            | (Product.description.ilike(search_term))
+            | (Product.sku.ilike(search_term))
+        )
+
     # Get total count
     count_query = select(func.count(Product.id)).where(
         Product.supplier_id == supplier_id
     )
     if is_active is not None:
         count_query = count_query.where(Product.is_active == is_active)
+    if q:
+        search_term = f"%{q}%"
+        count_query = count_query.where(
+            (Product.name.ilike(search_term))
+            | (Product.description.ilike(search_term))
+            | (Product.sku.ilike(search_term))
+        )
     count_result = await db.execute(count_query)
     total = count_result.scalar_one() or 0
 

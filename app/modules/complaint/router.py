@@ -39,12 +39,12 @@ def _validate_status_transition(
         ComplaintStatus.ESCALATED: {ComplaintStatus.RESOLVED},
         ComplaintStatus.RESOLVED: {ComplaintStatus.OPEN}
         if allow_reopen
-        else set[
-            Any
-        ](),  # Resolved complaints can be reopened by consumer if not satisfied
+        # Resolved complaints can be reopened by consumer if not satisfied
+        else set[ComplaintStatus](),
     }
 
-    allowed = valid_transitions.get(current_status, set())
+    # Use a plain empty set() as default; type checkers know it's a set[ComplaintStatus]
+    allowed = valid_transitions.get(current_status, set[ComplaintStatus]())
     if new_status not in allowed:
         raise ApplicationError(f"Cannot transition from {current_status.value} to {new_status.value}",
                                )
@@ -338,7 +338,8 @@ async def create_complaint(
             db,
             entity_id=complaint.id,
             entity_type="complaint",
-            metadata={"order_id": complaint.order_id}  # Store order_id in metadata for navigation
+            # Store order_id in metadata for navigation
+            metadata={"order_id": complaint.order_id}
         )
         await db.commit()
 
@@ -401,9 +402,6 @@ async def get_complaints(
     current_user: Annotated[User, Depends(get_current_user)],
     page: int = Query(1, ge=1, description="Page number"),
     size: int = Query(20, ge=1, le=100, description="Page size"),
-    status_filter: ComplaintStatus | None = Query(
-        None, description="Filter by status", alias="status"
-    ),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Get complaints (filtered by role: consumer sees own, sales rep sees assigned, manager sees assigned).
@@ -449,10 +447,6 @@ async def get_complaints(
         raise ApplicationError("Not enough permissions",
                                )
 
-    # Apply status filter
-    if status_filter:
-        query = query.where(Complaint.status == status_filter)
-
     # Get total count
     count_query = select(func.count(Complaint.id))
     if current_user.role == Role.CONSUMER.value:
@@ -479,8 +473,6 @@ async def get_complaints(
                 (Complaint.manager_id == current_user.id)
                 | (Complaint.sales_rep_id == current_user.id)
             )
-    if status_filter:
-        count_query = count_query.where(Complaint.status == status_filter)
 
     count_result = await db.execute(count_query)
     total = count_result.scalar_one() or 0
@@ -519,6 +511,7 @@ async def update_complaint_status(
     db: AsyncSession = Depends(get_db),
 ) -> ComplaintResponse:
     """Update complaint status (sales rep or manager only)."""
+
     # Check user is sales rep or manager
     if current_user.role not in (
         Role.SUPPLIER_OWNER.value,

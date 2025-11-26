@@ -1,5 +1,6 @@
 """Order management routes."""
 
+from decimal import Decimal
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query, status
@@ -12,6 +13,7 @@ from app.api.dependencies import get_current_user
 from app.core.exceptions import ApplicationError
 from app.core.roles import Role
 from app.db.session import get_db
+from app.modules.complaint.model import Complaint
 from app.modules.consumer.model import Consumer
 from app.modules.link.model import Link, LinkStatus
 from app.modules.order.model import Order, OrderItem, OrderStatus
@@ -229,11 +231,13 @@ async def create_order(
                 existing_chat_session = result.scalar_one_or_none()
                 if not existing_chat_session:
                     # If still not found, something else went wrong
-                    raise ApplicationError("Failed to create or find chat session")
+                    raise ApplicationError(
+                        "Failed to create or find chat session")
 
         # Post structured order message in the chat thread
         # Format: Clear order notification with order details
-        items_summary = ", ".join([f"{info['qty']}x {info['name']}" for info in products_info[:3]])
+        items_summary = ", ".join(
+            [f"{info['qty']}x {info['name']}" for info in products_info[:3]])
         if len(products_info) > 3:
             items_summary += f" and {len(products_info) - 3} more item(s)"
 
@@ -347,9 +351,6 @@ async def get_orders(
     current_user: Annotated[User, Depends(get_current_user)],
     page: int = Query(1, ge=1, description="Page number"),
     size: int = Query(20, ge=1, le=100, description="Page size"),
-    status_filter: OrderStatus | None = Query(
-        None, description="Filter by status", alias="status"
-    ),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Get orders (consumer: own orders only, supplier staff: their supplier's orders).
@@ -362,6 +363,7 @@ async def get_orders(
         joinedload(Order.supplier).joinedload(Supplier.user),
         joinedload(Order.consumer).joinedload(Consumer.user),
         joinedload(Order.sales_rep),
+        selectinload(Order.complaints),
     )
     consumer_id: int | None = None
     supplier_id: int | None = None
@@ -375,6 +377,7 @@ async def get_orders(
         consumer_id = consumer.id
         # Filter by the specific consumer's ID, not by organization
         query = query.where(Order.consumer_id == consumer_id)
+
 
     # Supplier staff (owner/manager/sales): get their supplier's orders
     elif current_user.role in (
@@ -394,9 +397,6 @@ async def get_orders(
         raise ApplicationError("Not enough permissions",
                                )
 
-    # Apply status filter
-    if status_filter:
-        query = query.where(Order.status == status_filter)
 
     # Get total count
     count_query = select(func.count(Order.id))
@@ -408,8 +408,6 @@ async def get_orders(
         if current_user.role == Role.SUPPLIER_SALES.value:
             count_query = count_query.where(
                 Order.sales_rep_id == current_user.id)
-    if status_filter:
-        count_query = count_query.where(Order.status == status_filter)
 
     count_result = await db.execute(count_query)
     total = count_result.scalar_one() or 0
@@ -422,8 +420,15 @@ async def get_orders(
     result = await db.execute(query)
     orders = result.scalars().all()
 
-    # Create response
-    order_responses = [OrderResponse.model_validate(order) for order in orders]
+    # Create response with complaint information
+    order_responses = []
+    for order in orders:
+        order_dict = OrderResponse.model_validate(order).model_dump()
+        # Add has_complaint field
+        order_dict['has_complaint'] = len(
+            order.complaints) > 0 if order.complaints else False
+        order_responses.append(order_dict)
+
     return create_pagination_response(order_responses, page, size, total).model_dump()
 
 
