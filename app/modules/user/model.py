@@ -39,6 +39,8 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     team_volume: Mapped[float] = mapped_column(Numeric(12, 2), default=0, nullable=False)
     payout_method: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    ref_code_changed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    push_token: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )

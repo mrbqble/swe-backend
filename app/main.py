@@ -56,6 +56,8 @@ app = FastAPI(
         {"name": "cart", "description": "Shopping cart with 15-minute reservation TTL"},
         {"name": "orders", "description": "Order creation and history"},
         {"name": "notifications", "description": "In-app notifications"},
+        {"name": "faq", "description": "Public FAQ"},
+        {"name": "admin", "description": "Admin panel endpoints"},
     ],
 )
 

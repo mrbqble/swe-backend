@@ -69,7 +69,7 @@ async def create_order(
 
     order = Order(
         user_id=current_user.id,
-        status="pending",
+        status="placed",
         total_amount=total,
         currency="KZT",
         notes=body.notes,

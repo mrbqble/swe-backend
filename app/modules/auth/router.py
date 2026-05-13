@@ -15,7 +15,7 @@ from app.api.dependencies import get_current_user
 from app.core.config import settings
 from app.core.exceptions import ApplicationError
 from app.db.session import get_db
-from app.modules.auth.model import OtpCode, Session
+from app.modules.auth.model import EmailConfirmation, OtpCode, Session
 from app.modules.auth.schema import (
     LoginRequest,
     RefreshRequest,
@@ -32,16 +32,22 @@ AuthRouter = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger(__name__)
 
 _DEV_OTP = "000000"
+_EMAIL_CONF_EXPIRE_DAYS = 7
 
 
 def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def _make_access_token(user: User) -> str:
+def _make_access_token(user: User, session_id: int) -> str:
     from app.core.security import create_access_token
     return create_access_token(
-        data={"sub": str(user.id), "phone": user.phone, "role": user.status_tier}
+        data={
+            "sub": str(user.id),
+            "phone": user.phone,
+            "role": user.status_tier,
+            "sid": session_id,
+        }
     )
 
 
@@ -69,6 +75,33 @@ async def _create_session(user: User, refresh_token: str, request: Request, db: 
     db.add(session)
     await db.flush()
     return session
+
+
+def _gen_email_code() -> str:
+    return "".join(random.choices(string.digits, k=6))
+
+
+async def _create_email_confirmation(user: User, db: AsyncSession) -> str:
+    """Create an EmailConfirmation record and return the plaintext code."""
+    # Invalidate any previous active confirmations for this user
+    result = await db.execute(
+        select(EmailConfirmation).where(
+            EmailConfirmation.user_id == user.id,
+            EmailConfirmation.is_used == False,  # noqa: E712
+        )
+    )
+    for old in result.scalars().all():
+        old.is_used = True
+
+    code = _gen_email_code()
+    confirmation = EmailConfirmation(
+        user_id=user.id,
+        code_hash=_hash_token(code),
+        expires_at=datetime.now(UTC) + timedelta(days=_EMAIL_CONF_EXPIRE_DAYS),
+    )
+    db.add(confirmation)
+    await db.flush()
+    return code
 
 
 async def _count_recent_otp_sends(phone: str, db: AsyncSession) -> int:
@@ -120,10 +153,8 @@ async def send_otp(
         channel = "mock"
         logger.info(f"DEV OTP for {phone}: {code}")
     else:
-        # Production: deliver via WhatsApp, SMS fallback
-        raise NotImplementedError(
-            "OTP delivery not configured — set TWILIO credentials"
-        )
+        # TODO: deliver via WhatsApp (Twilio), SMS fallback
+        raise NotImplementedError("OTP delivery not configured — set TWILIO credentials")
 
     expires_at = datetime.now(UTC) + timedelta(minutes=settings.OTP_EXPIRE_MINUTES)
     otp = OtpCode(
@@ -147,7 +178,6 @@ async def verify_otp(
     phone = request.phone
     code = request.code
 
-    # In dev mode, accept 000000 directly without checking DB
     if settings.ENV == "dev" and code == _DEV_OTP:
         user = await get_user_by_phone(phone, db)
         return {"verified": True, "is_registered": user is not None}
@@ -185,7 +215,6 @@ async def register(
     """Register a new user. Requires a recently verified OTP."""
     phone = request.phone
 
-    # Check OTP was verified recently (used OTP within OTP_EXPIRE_MINUTES)
     window = datetime.now(UTC) - timedelta(minutes=settings.OTP_EXPIRE_MINUTES)
     result = await db.execute(
         select(OtpCode)
@@ -198,11 +227,9 @@ async def register(
     )
     verified_otp = result.scalars().first()
 
-    # In dev mode, also accept if code is 000000 (even without a stored used OTP)
     if verified_otp is None and not (settings.ENV == "dev" and request.code == _DEV_OTP):
         raise ApplicationError("OTP not verified. Complete phone verification first.")
 
-    # Validate referral code
     result = await db.execute(
         select(User).where(func.lower(User.ref_code) == request.ref_code.lower())
     )
@@ -210,16 +237,13 @@ async def register(
     if referrer is None:
         raise ApplicationError("Invalid referral code.")
 
-    # Phone uniqueness
     existing = await get_user_by_phone(phone, db)
     if existing:
         raise ApplicationError("Phone number already registered.")
 
-    # Email uniqueness
     if await get_user_by_email(request.email, db):
         raise ApplicationError("Email already registered.")
 
-    # Age check
     today = datetime.now(UTC).date()
     age = today.year - request.dob.year - (
         (today.month, today.day) < (request.dob.month, request.dob.day)
@@ -227,7 +251,6 @@ async def register(
     if age < 18:
         raise ApplicationError("You must be at least 18 years old to register.")
 
-    # Generate unique ref_code
     for _ in range(10):
         candidate = _gen_ref_code()
         check = await db.execute(select(User).where(User.ref_code == candidate))
@@ -252,9 +275,16 @@ async def register(
     db.add(user)
     await db.flush()
 
-    access_token = _make_access_token(user)
+    # Create email confirmation record
+    email_code = await _create_email_confirmation(user, db)
+    if settings.ENV == "dev":
+        logger.info(f"DEV email confirmation for {user.email}: {email_code}")
+    else:
+        pass  # TODO: send via email (SendGrid/Mailgun)
+
     refresh_token = _make_refresh_token()
-    await _create_session(user, refresh_token, http_request, db)
+    session = await _create_session(user, refresh_token, http_request, db)
+    access_token = _make_access_token(user, session.id)
     await db.commit()
     await db.refresh(user)
 
@@ -277,9 +307,9 @@ async def login(
     if user.is_frozen:
         raise ApplicationError("Account is frozen. Contact support.")
 
-    access_token = _make_access_token(user)
     refresh_token = _make_refresh_token()
-    await _create_session(user, refresh_token, http_request, db)
+    session = await _create_session(user, refresh_token, http_request, db)
+    access_token = _make_access_token(user, session.id)
     await db.commit()
 
     return _build_token_response(access_token, refresh_token)
@@ -314,9 +344,11 @@ async def refresh(
     session.refresh_token_hash = _hash_token(new_refresh_token)
     session.last_used_at = datetime.now(UTC)
     session.expires_at = datetime.now(UTC) + timedelta(minutes=settings.REFRESH_TOKEN_EXPIRE_MINUTES)
+    await db.flush()
+
+    access_token = _make_access_token(user, session.id)
     await db.commit()
 
-    access_token = _make_access_token(user)
     return _build_token_response(access_token, new_refresh_token)
 
 

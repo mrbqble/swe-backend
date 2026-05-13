@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.core.config import settings
 from app.db.base import Base
+from app.modules.admin.model import *  # noqa: F403
 from app.modules.auth.model import *  # noqa: F403
 from app.modules.cart.model import *  # noqa: F403
 from app.modules.notification.model import *  # noqa: F403
