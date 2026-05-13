@@ -50,14 +50,12 @@ app = FastAPI(
     docs_url=docs_url,
     redoc_url=redoc_url,
     openapi_tags=[
-        {
-            "name": "auth",
-            "description": "Authentication endpoints (OTP, register, login, refresh, logout)",
-        },
-        {
-            "name": "users",
-            "description": "User profile endpoints",
-        },
+        {"name": "auth", "description": "Authentication endpoints (OTP, register, login, refresh, logout)"},
+        {"name": "users", "description": "User profile endpoints"},
+        {"name": "products", "description": "Product catalog — browse and search"},
+        {"name": "cart", "description": "Shopping cart with 15-minute reservation TTL"},
+        {"name": "orders", "description": "Order creation and history"},
+        {"name": "notifications", "description": "In-app notifications"},
     ],
 )
 
@@ -73,3 +71,8 @@ app.add_middleware(StructuredLoggingMiddleware)
 
 register_exception_handlers(app)
 register_routers(app)
+
+
+@app.get("/health", include_in_schema=False)
+async def health() -> dict:
+    return {"status": "ok"}

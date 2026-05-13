@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     OTP_RESEND_LIMIT: int = 3
     OTP_RESEND_WINDOW_MINUTES: int = 15
 
+    # Cart
+    CART_RESERVATION_MINUTES: int = 15
+
     # Twilio (OTP delivery — leave empty in dev)
     TWILIO_ACCOUNT_SID: str = ""
     TWILIO_AUTH_TOKEN: str = ""

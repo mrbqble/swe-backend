@@ -10,6 +10,9 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.modules.auth.model import Session
+    from app.modules.cart.model import CartItem
+    from app.modules.notification.model import Notification
+    from app.modules.order.model import Order
 
 
 class User(Base):
@@ -49,3 +52,6 @@ class User(Base):
     parent: Mapped[User | None] = relationship("User", remote_side="User.id", foreign_keys=[parent_id])
     children: Mapped[list[User]] = relationship("User", back_populates="parent", foreign_keys=[parent_id])
     sessions: Mapped[list[Session]] = relationship("Session", back_populates="user", cascade="all, delete-orphan")
+    cart_items: Mapped[list[CartItem]] = relationship("CartItem", back_populates="user", cascade="all, delete-orphan")
+    orders: Mapped[list[Order]] = relationship("Order", back_populates="user", cascade="all, delete-orphan")
+    notifications: Mapped[list[Notification]] = relationship("Notification", back_populates="recipient", cascade="all, delete-orphan")
