@@ -159,4 +159,16 @@ async def update_order_status(
     await db.commit()
     await db.refresh(order)
 
+    _PUSH_MESSAGES: dict[str, tuple[str, str]] = {
+        "paid":      ("Order confirmed",  f"Your order #{order_id} payment was received."),
+        "packed":    ("Order packed",     f"Your order #{order_id} is packed and ready."),
+        "shipped":   ("Order shipped",    f"Your order #{order_id} is on its way."),
+        "delivered": ("Order delivered",  f"Your order #{order_id} has been delivered."),
+        "cancelled": ("Order cancelled",  f"Your order #{order_id} was cancelled."),
+    }
+    if new_status in _PUSH_MESSAGES:
+        title, body_text = _PUSH_MESSAGES[new_status]
+        from app.utils.push import send_push
+        await send_push(order.user_id, title, body_text, db)
+
     return _order_dict(order)

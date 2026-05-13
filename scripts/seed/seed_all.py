@@ -7,9 +7,12 @@ import sys
 from app.modules.admin.model import AdminAction, AdminUser, FAQ  # noqa: F401
 from app.modules.auth.model import EmailConfirmation, OtpCode, Session  # noqa: F401
 from app.modules.cart.model import CartItem  # noqa: F401
+from app.modules.ip_too.model import IpToo  # noqa: F401
 from app.modules.notification.model import Notification  # noqa: F401
 from app.modules.order.model import Order, OrderItem  # noqa: F401
+from app.modules.payment.model import Payment  # noqa: F401
 from app.modules.product.model import Product  # noqa: F401
+from app.modules.support.model import Suggestion  # noqa: F401
 from app.modules.user.model import User  # noqa: F401
 
 from app.db.session import AsyncSessionLocal

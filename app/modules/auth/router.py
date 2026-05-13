@@ -277,10 +277,8 @@ async def register(
 
     # Create email confirmation record
     email_code = await _create_email_confirmation(user, db)
-    if settings.ENV == "dev":
-        logger.info(f"DEV email confirmation for {user.email}: {email_code}")
-    else:
-        pass  # TODO: send via email (SendGrid/Mailgun)
+    from app.utils.email import send_transactional
+    await send_transactional(str(user.email), "email_confirmation", {"code": email_code})
 
     refresh_token = _make_refresh_token()
     session = await _create_session(user, refresh_token, http_request, db)

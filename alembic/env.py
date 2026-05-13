@@ -16,9 +16,12 @@ from app.db.base import Base
 from app.modules.admin.model import *  # noqa: F403
 from app.modules.auth.model import *  # noqa: F403
 from app.modules.cart.model import *  # noqa: F403
+from app.modules.ip_too.model import *  # noqa: F403
 from app.modules.notification.model import *  # noqa: F403
 from app.modules.order.model import *  # noqa: F403
+from app.modules.payment.model import *  # noqa: F403
 from app.modules.product.model import *  # noqa: F403
+from app.modules.support.model import *  # noqa: F403
 from app.modules.user.model import *  # noqa: F403
 
 config = context.config

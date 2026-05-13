@@ -295,5 +295,90 @@ async def reset_partner_password(
         return {"message": "Password reset"}
 
 
+# ── IP/TOO verification queue ─────────────────────────────────────────────────
+
+@AdminPartnerRouter.get("/ip-too/pending")
+async def list_pending_ip_too(
+    admin: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    """List all IP/TOO records awaiting manual verification."""
+    from app.modules.ip_too.model import IpToo
+
+    rows = (
+        await db.execute(
+            select(IpToo, User)
+            .join(User, IpToo.user_id == User.id)
+            .where(IpToo.status == "pending")
+            .order_by(IpToo.created_at.asc())
+        )
+    ).all()
+
+    return [
+        {
+            "id": ip.id,
+            "user_id": ip.user_id,
+            "user_phone": u.phone,
+            "user_name": f"{u.first_name} {u.last_name or ''}".strip(),
+            "user_ref_code": u.ref_code,
+            "type": ip.type,
+            "iin_bin": ip.iin_bin,
+            "name": ip.name,
+            "status": ip.status,
+            "created_at": ip.created_at.isoformat(),
+        }
+        for ip, u in rows
+    ]
+
+
+@AdminPartnerRouter.patch("/ip-too/{record_id}/verify")
+async def verify_ip_too(
+    record_id: int,
+    body: dict,
+    request: Request,
+    admin: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Approve or reject a pending IP/TOO record."""
+    from datetime import UTC, datetime
+
+    from app.modules.ip_too.model import IpToo
+
+    action_str = body.get("action", "").strip().lower()
+    if action_str not in ("approve", "reject"):
+        raise ApplicationError("'action' must be 'approve' or 'reject'.")
+    if action_str == "reject" and not body.get("rejection_reason"):
+        raise ApplicationError("'rejection_reason' is required when rejecting.")
+
+    record = await db.get(IpToo, record_id)
+    if record is None:
+        raise ApplicationError("IP/TOO record not found.", status_code=404)
+
+    before = {"status": record.status}
+
+    if action_str == "approve":
+        record.status = "verified"
+        record.verified_at = datetime.now(UTC)
+    else:
+        record.status = "rejected"
+        record.rejection_reason = body["rejection_reason"]
+        record.is_active = False
+
+    after = {"status": record.status}
+
+    await _log_action(admin, f"ip_too_{action_str}", "ip_too", record_id, before, after, request, db)
+    await db.commit()
+    await db.refresh(record)
+
+    return {
+        "id": record.id,
+        "user_id": record.user_id,
+        "iin_bin": record.iin_bin,
+        "status": record.status,
+        "rejection_reason": record.rejection_reason,
+        "verified_at": record.verified_at.isoformat() if record.verified_at else None,
+    }
+
+
 # avoid circular import
 from app.core.config import settings  # noqa: E402

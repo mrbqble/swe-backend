@@ -388,10 +388,8 @@ async def email_resend(
     db.add(conf)
     await db.commit()
 
-    if settings.ENV == "dev":
-        logger.info(f"DEV email confirmation for {current_user.email}: {code}")
-    else:
-        pass  # TODO: send via email (SendGrid/Mailgun)
+    from app.utils.email import send_transactional
+    await send_transactional(str(current_user.email), "email_confirmation", {"code": code})
 
     return {"message": "Confirmation code resent"}
 

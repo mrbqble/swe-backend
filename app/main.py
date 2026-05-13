@@ -57,6 +57,8 @@ app = FastAPI(
         {"name": "orders", "description": "Order creation and history"},
         {"name": "notifications", "description": "In-app notifications"},
         {"name": "faq", "description": "Public FAQ"},
+        {"name": "payments", "description": "Payment initiation and Kaspi webhook"},
+        {"name": "support", "description": "Partner suggestions"},
         {"name": "admin", "description": "Admin panel endpoints"},
     ],
 )
