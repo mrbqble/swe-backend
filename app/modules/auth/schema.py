@@ -45,7 +45,7 @@ class VerifyOtpRequest(BaseModel):
 
 
 class RegisterRequest(BaseModel):
-    model_config = ConfigDict(strict=True)
+    model_config = ConfigDict(strict=False)  # date fields need string coercion from JSON
 
     phone: str = Field(..., description="Phone number in E.164 format")
     code: str = Field(..., description="Verified OTP code", min_length=6, max_length=6)

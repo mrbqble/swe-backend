@@ -3,6 +3,7 @@
 import asyncio
 import sys
 
+from app.modules.auth.model import OtpCode, Session  # noqa: F401
 from app.modules.user.model import User  # noqa: F401
 
 from app.db.session import AsyncSessionLocal

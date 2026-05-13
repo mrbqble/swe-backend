@@ -6,6 +6,7 @@ from datetime import UTC, date, datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules.auth.model import OtpCode, Session  # noqa: F401 — register mappers
 from app.modules.user.model import User
 from app.utils.hashing import hash_password
 
