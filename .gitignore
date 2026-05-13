@@ -105,6 +105,9 @@ logs/
 *.log.*
 *.out
 
+# Claude Code local session files (contain machine-specific paths and dev tokens)
+.claude/settings.local.json
+
 # Alembic
 # Only ignore compiled Python files, not migration files
 alembic/versions/__pycache__/

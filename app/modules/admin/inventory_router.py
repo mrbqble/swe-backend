@@ -70,7 +70,10 @@ async def update_inventory(
     updated = False
 
     if "stock_qty" in body:
-        qty = int(body["stock_qty"])
+        try:
+            qty = int(body["stock_qty"])
+        except (ValueError, TypeError):
+            raise ApplicationError("stock_qty must be a non-negative integer.")
         if qty < 0:
             raise ApplicationError("stock_qty cannot be negative.")
         product.stock_qty = qty

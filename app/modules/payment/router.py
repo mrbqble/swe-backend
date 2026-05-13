@@ -119,6 +119,15 @@ async def kaspi_callback(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Kaspi payment webhook. In dev, accepts any payload without signature check."""
+    from app.core.config import settings
+
+    if settings.ENV != "dev":
+        # Production: reject unsigned callbacks until Kaspi HMAC verification is implemented.
+        raise ApplicationError(
+            "Kaspi callback not yet enabled in production — signature verification required.",
+            status_code=501,
+        )
+
     payment_id = body.get("payment_id", "")
     status = body.get("status", "").strip().lower()
 
@@ -132,6 +141,15 @@ async def kaspi_callback(
     ).scalar_one_or_none()
     if payment is None:
         raise ApplicationError("Payment not found.", status_code=404)
+
+    # Idempotency: ignore callbacks for payments already in a terminal state.
+    if payment.status != "pending":
+        logger.info(
+            "Kaspi callback ignored — payment %s already in status '%s'",
+            payment_id,
+            payment.status,
+        )
+        return {"received": True}
 
     order = (
         await db.execute(
@@ -157,6 +175,7 @@ async def kaspi_callback(
     elif status == "failed":
         payment.status = "failed"
         if order:
+            order.status = "cancelled"
             order.is_cancelled = True
             # Restore stock for each item
             for item in order.items:

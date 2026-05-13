@@ -39,6 +39,8 @@ async def send_email(to: str, subject: str, body: str) -> None:
 
 
 async def send_transactional(to: str, template: str, data: dict) -> None:
+    if template not in _TEMPLATES:
+        raise ValueError(f"Unknown email template: {template!r}. Valid: {list(_TEMPLATES)}")
     subject_tpl, body_tpl = _TEMPLATES[template]
     subject = subject_tpl.format_map(data)
     body = body_tpl.format_map(data)

@@ -85,7 +85,7 @@ def upgrade() -> None:
             sa.ForeignKey("users.id", ondelete="CASCADE"),
             nullable=False,
         ),
-        sa.Column("status", sa.String(20), nullable=False, server_default="pending"),
+        sa.Column("status", sa.String(20), nullable=False, server_default="placed"),
         sa.Column("total_amount", sa.Numeric(12, 2), nullable=False),
         sa.Column("currency", sa.String(3), nullable=False, server_default="KZT"),
         sa.Column("notes", sa.Text, nullable=True),

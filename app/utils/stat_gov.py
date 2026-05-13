@@ -17,10 +17,7 @@ async def verify_iin_bin(iin_bin: str) -> dict | None:
         entity_type = "too" if iin_bin[0] in ("4", "5", "6") else "ip"
         return {"name": "Test Business Name", "status": "active", "type": entity_type}
 
-    # TODO: implement actual stat.gov.kz API call when credentials are available
-    # try:
-    #     async with httpx.AsyncClient(timeout=10) as client:
-    #         resp = await client.get(f"https://stat.gov.kz/api/...", params={"bin": iin_bin})
-    #         ...
-    # except Exception:
-    return {"name": None, "status": "pending_manual"}
+    # Production: real stat.gov.kz API call required — credentials not yet provided.
+    raise NotImplementedError(
+        "stat.gov.kz integration not configured. Set ENV=dev for mock verification."
+    )

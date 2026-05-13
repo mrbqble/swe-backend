@@ -26,8 +26,8 @@ async def send_push(user_id: int, title: str, body: str, db: AsyncSession) -> No
         )
         return
 
-    # TODO: Expo Push API call
-    # async with httpx.AsyncClient() as client:
-    #     await client.post("https://exp.host/--/api/v2/push/send", json={
-    #         "to": push_token, "title": title, "body": body
-    #     })
+    # Production: Expo Push API not yet wired up.
+    # Logged as a warning so push failures don't abort the primary request flow.
+    logger.warning(
+        "PROD PUSH SKIPPED — Expo Push API not configured. user=%d title=%r", user_id, title
+    )

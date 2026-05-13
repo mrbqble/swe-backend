@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String
@@ -37,7 +38,7 @@ class User(Base):
     status_tier: Mapped[str] = mapped_column(String(50), default="partner", nullable=False)
     is_frozen: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    team_volume: Mapped[float] = mapped_column(Numeric(12, 2), default=0, nullable=False)
+    team_volume: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0, nullable=False)
     payout_method: Mapped[str | None] = mapped_column(String(100), nullable=True)
     ref_code_changed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     push_token: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -51,7 +52,7 @@ class User(Base):
         nullable=False,
     )
 
-    parent: Mapped[User | None] = relationship("User", remote_side="User.id", foreign_keys=[parent_id])
+    parent: Mapped[User | None] = relationship("User", remote_side="User.id", foreign_keys=[parent_id], back_populates="children")
     children: Mapped[list[User]] = relationship("User", back_populates="parent", foreign_keys=[parent_id])
     sessions: Mapped[list[Session]] = relationship("Session", back_populates="user", cascade="all, delete-orphan")
     cart_items: Mapped[list[CartItem]] = relationship("CartItem", back_populates="user", cascade="all, delete-orphan")

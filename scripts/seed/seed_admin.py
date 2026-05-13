@@ -1,6 +1,7 @@
 """Seed admin_users table with a default iCare admin account."""
 
 import asyncio
+import os
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,9 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.admin.model import AdminUser
 from app.utils.hashing import hash_password
 
-_ADMIN_EMAIL = "admin@icare.kz"
-_ADMIN_PASSWORD = "Admin123!"
+_ADMIN_EMAIL = os.environ.get("SEED_ADMIN_EMAIL", "admin@icare.kz")
 _ADMIN_NAME = "iCare Admin"
+
+# Password MUST be supplied via env var in non-dev environments.
+# Dev fallback is intentionally weak — change before production.
+_DEV_FALLBACK_PASSWORD = "Admin123!"
+_ADMIN_PASSWORD = os.environ.get("SEED_ADMIN_PASSWORD", _DEV_FALLBACK_PASSWORD)
 
 
 async def seed_admin(session: AsyncSession) -> AdminUser:
@@ -23,6 +28,9 @@ async def seed_admin(session: AsyncSession) -> AdminUser:
         print(f"  Admin already exists: {_ADMIN_EMAIL}")
         return existing
 
+    if _ADMIN_PASSWORD == _DEV_FALLBACK_PASSWORD:
+        print("  WARNING: using default dev password — set SEED_ADMIN_PASSWORD before production.")
+
     admin = AdminUser(
         email=_ADMIN_EMAIL,
         password_hash=hash_password(_ADMIN_PASSWORD),
@@ -33,8 +41,7 @@ async def seed_admin(session: AsyncSession) -> AdminUser:
     await session.flush()
     await session.commit()
 
-    print(f"  Created admin: {_ADMIN_EMAIL} / {_ADMIN_PASSWORD}")
-    print("  ⚠️  CHANGE THIS PASSWORD BEFORE PRODUCTION")
+    print(f"  Created admin: {_ADMIN_EMAIL} (password set from {'env' if _ADMIN_PASSWORD != _DEV_FALLBACK_PASSWORD else 'dev default'})")
     return admin
 
 
