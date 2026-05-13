@@ -1,293 +1,369 @@
 """Authentication routes."""
 
-import contextlib
+import hashlib
 import logging
+import random
+import secrets
+import string
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Request, status
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import is_mobile_client
+from app.api.dependencies import get_current_user
+from app.core.config import settings
 from app.core.exceptions import ApplicationError
-from app.core.roles import Role
-from app.core.security import (
-    create_access_token,
-    create_refresh_token,
-    decode_refresh_token,
-)
 from app.db.session import get_db
+from app.modules.auth.model import EmailConfirmation, OtpCode, Session
 from app.modules.auth.schema import (
     LoginRequest,
-    PasswordResetRequest,
-    PasswordResetResponse,
     RefreshRequest,
-    SignupRequest,
+    RegisterRequest,
+    SendOtpRequest,
     TokenResponse,
+    VerifyOtpRequest,
 )
-from app.modules.consumer.model import Consumer
 from app.modules.user.model import User
 from app.utils.hashing import hash_password, verify_password
-from app.utils.helpers import get_user_by_email, get_user_by_id
-from app.utils.password_policy import validate_password_policy
+from app.utils.helpers import get_user_by_email, get_user_by_phone
 
 AuthRouter = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger(__name__)
 
+_DEV_OTP = "000000"
+_EMAIL_CONF_EXPIRE_DAYS = 7
 
-def _create_tokens(user: User) -> TokenResponse:
-    """Create access and refresh tokens for user with role-based scopes."""
+
+def _hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def _make_access_token(user: User, session_id: int) -> str:
+    from app.core.security import create_access_token
+    return create_access_token(
+        data={
+            "sub": str(user.id),
+            "phone": user.phone,
+            "role": user.status_tier,
+            "sid": session_id,
+        }
+    )
+
+
+def _make_refresh_token() -> str:
+    return secrets.token_urlsafe(48)
+
+
+def _build_token_response(access_token: str, refresh_token: str) -> TokenResponse:
     return TokenResponse(
-        access_token=create_access_token(
-            data={"sub": user.id, "email": user.email, "role": user.role}
-        ),
-        refresh_token=create_refresh_token(data={"sub": user.id}),
+        access_token=access_token,
+        refresh_token=refresh_token,
         token_type="bearer",
     )
 
 
-@AuthRouter.post(
-    "/signup",
-    response_model=TokenResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="Register a new user",
-    description="Create a new user account. Available roles: consumer, supplier_owner. Password must meet policy requirements. Rate limited to 10 requests per minute.",
-    responses={
-        201: {"description": "User created successfully"},
-        400: {"description": "Invalid input or email already registered"},
-        422: {"description": "Validation error"},
-        429: {"description": "Rate limit exceeded"},
-    },
-)
-async def signup(
-    request: SignupRequest,
+async def _create_session(user: User, refresh_token: str, request: Request, db: AsyncSession) -> Session:
+    expires_at = datetime.now(UTC) + timedelta(minutes=settings.REFRESH_TOKEN_EXPIRE_MINUTES)
+    session = Session(
+        user_id=user.id,
+        refresh_token_hash=_hash_token(refresh_token),
+        ip=request.client.host if request.client else None,
+        expires_at=expires_at,
+        last_used_at=datetime.now(UTC),
+    )
+    db.add(session)
+    await db.flush()
+    return session
+
+
+def _gen_email_code() -> str:
+    return "".join(random.choices(string.digits, k=6))
+
+
+async def _create_email_confirmation(user: User, db: AsyncSession) -> str:
+    """Create an EmailConfirmation record and return the plaintext code."""
+    # Invalidate any previous active confirmations for this user
+    result = await db.execute(
+        select(EmailConfirmation).where(
+            EmailConfirmation.user_id == user.id,
+            EmailConfirmation.is_used == False,  # noqa: E712
+        )
+    )
+    for old in result.scalars().all():
+        old.is_used = True
+
+    code = _gen_email_code()
+    confirmation = EmailConfirmation(
+        user_id=user.id,
+        code_hash=_hash_token(code),
+        expires_at=datetime.now(UTC) + timedelta(days=_EMAIL_CONF_EXPIRE_DAYS),
+    )
+    db.add(confirmation)
+    await db.flush()
+    return code
+
+
+async def _count_recent_otp_sends(phone: str, db: AsyncSession) -> int:
+    window = datetime.now(UTC) - timedelta(minutes=settings.OTP_RESEND_WINDOW_MINUTES)
+    result = await db.execute(
+        select(func.count()).where(
+            OtpCode.phone == phone,
+            OtpCode.created_at >= window,
+        )
+    )
+    return result.scalar_one()
+
+
+async def _get_active_otp(phone: str, db: AsyncSession) -> OtpCode | None:
+    result = await db.execute(
+        select(OtpCode)
+        .where(
+            OtpCode.phone == phone,
+            OtpCode.is_used == False,  # noqa: E712
+            OtpCode.expires_at > datetime.now(UTC),
+        )
+        .order_by(OtpCode.created_at.desc())
+    )
+    return result.scalars().first()
+
+
+def _gen_ref_code() -> str:
+    digits = "".join(random.choices(string.digits, k=6))
+    return f"ICR{digits}"
+
+
+@AuthRouter.post("/send-otp", status_code=status.HTTP_200_OK)
+async def send_otp(
+    request: SendOtpRequest,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Send OTP to phone. In dev mode, always sends 000000 (no delivery)."""
+    phone = request.phone
+
+    send_count = await _count_recent_otp_sends(phone, db)
+    if send_count >= settings.OTP_RESEND_LIMIT:
+        raise ApplicationError(
+            f"Too many OTP requests. Try again in {settings.OTP_RESEND_WINDOW_MINUTES} minutes.",
+            status_code=429,
+        )
+
+    if settings.ENV == "dev":
+        code = _DEV_OTP
+        channel = "mock"
+        logger.info(f"DEV OTP for {phone}: {code}")
+    else:
+        # TODO: deliver via WhatsApp (Twilio), SMS fallback
+        raise NotImplementedError("OTP delivery not configured — set TWILIO credentials")
+
+    expires_at = datetime.now(UTC) + timedelta(minutes=settings.OTP_EXPIRE_MINUTES)
+    otp = OtpCode(
+        phone=phone,
+        code_hash=_hash_token(code),
+        channel=channel,
+        expires_at=expires_at,
+    )
+    db.add(otp)
+    await db.commit()
+
+    return {"message": "Code sent", "channel": channel}
+
+
+@AuthRouter.post("/verify-otp", status_code=status.HTTP_200_OK)
+async def verify_otp(
+    request: VerifyOtpRequest,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Verify OTP code. Returns verified status and whether phone is registered."""
+    phone = request.phone
+    code = request.code
+
+    if settings.ENV == "dev" and code == _DEV_OTP:
+        user = await get_user_by_phone(phone, db)
+        return {"verified": True, "is_registered": user is not None}
+
+    otp = await _get_active_otp(phone, db)
+    if otp is None:
+        raise ApplicationError("No active OTP found for this phone. Request a new code.")
+
+    otp.attempts += 1
+
+    if otp.attempts > settings.OTP_MAX_ATTEMPTS:
+        await db.commit()
+        raise ApplicationError(
+            f"Too many failed attempts. Request a new code after {settings.OTP_BLOCK_MINUTES} minutes.",
+            status_code=429,
+        )
+
+    if otp.code_hash != _hash_token(code):
+        await db.commit()
+        raise ApplicationError("Invalid OTP code.")
+
+    otp.is_used = True
+    await db.commit()
+
+    user = await get_user_by_phone(phone, db)
+    return {"verified": True, "is_registered": user is not None}
+
+
+@AuthRouter.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+async def register(
+    request: RegisterRequest,
     http_request: Request,
     db: AsyncSession = Depends(get_db),
-):
-    """
-    Create a new user account.
+) -> TokenResponse:
+    """Register a new user. Requires a recently verified OTP."""
+    phone = request.phone
 
-    **Role Requirements:** None (public endpoint)
+    window = datetime.now(UTC) - timedelta(minutes=settings.OTP_EXPIRE_MINUTES)
+    result = await db.execute(
+        select(OtpCode)
+        .where(
+            OtpCode.phone == phone,
+            OtpCode.is_used == True,  # noqa: E712
+            OtpCode.created_at >= window,
+        )
+        .order_by(OtpCode.created_at.desc())
+    )
+    verified_otp = result.scalars().first()
 
-    **Client Restrictions:**
-    - Mobile app: Only consumers can sign up
-    - Web app: Only supplier owners can sign up
+    if verified_otp is None and not (settings.ENV == "dev" and request.code == _DEV_OTP):
+        raise ApplicationError("OTP not verified. Complete phone verification first.")
 
-    **Password Policy:**
-    - Minimum 8 characters
-    - At least one uppercase letter
-    - At least one lowercase letter
-    - At least one digit
-    """
-    is_mobile = is_mobile_client(http_request)
+    result = await db.execute(
+        select(User).where(func.lower(User.ref_code) == request.ref_code.lower())
+    )
+    referrer = result.scalar_one_or_none()
+    if referrer is None:
+        raise ApplicationError("Invalid referral code.")
 
-    # Mobile app: Only consumers can sign up
-    if is_mobile and request.role != Role.CONSUMER:
-        raise ApplicationError("Only consumers can sign up through the mobile app")
+    existing = await get_user_by_phone(phone, db)
+    if existing:
+        raise ApplicationError("Phone number already registered.")
 
-    # Web app: Only supplier owners can sign up
-    if not is_mobile and request.role != Role.SUPPLIER_OWNER:
-        raise ApplicationError("Only supplier owners can sign up through the web app")
+    if await get_user_by_email(request.email, db):
+        raise ApplicationError("Email already registered.")
 
-    existing_user = await get_user_by_email(request.email, db)
+    today = datetime.now(UTC).date()
+    age = today.year - request.dob.year - (
+        (today.month, today.day) < (request.dob.month, request.dob.day)
+    )
+    if age < 18:
+        raise ApplicationError("You must be at least 18 years old to register.")
 
-    if existing_user:
-        raise ApplicationError("Email already registered")
+    for _ in range(10):
+        candidate = _gen_ref_code()
+        check = await db.execute(select(User).where(User.ref_code == candidate))
+        if check.scalar_one_or_none() is None:
+            new_ref_code = candidate
+            break
+    else:
+        raise ApplicationError("Could not generate a unique referral code. Please try again.")
 
-    # Validate password policy
-    try:
-        validate_password_policy(request.password)
-    except ValueError as e:  # PasswordPolicyError is a ValueError subclass
-        raise ApplicationError(str(e))
-
-    password_hash = hash_password(request.password)
     user = User(
-        email=request.email,
-        password_hash=password_hash,
+        phone=phone,
+        password_hash=hash_password(request.password),
         first_name=request.first_name,
         last_name=request.last_name,
-        role=request.role.value,
+        dob=request.dob,
+        email=str(request.email),
+        city=request.city,
+        ref_code=new_ref_code,
+        parent_id=referrer.id,
+        status_tier="partner",
     )
+    db.add(user)
+    await db.flush()
 
-    # Create user and consumer (if applicable) in a single commit so
-    # consumer profile creation cannot silently fail after user is created.
-    consumer = None
-    try:
-        role_value = (
-            request.role.value if hasattr(
-                request.role, "value") else str(request.role)
-        )
-        db.add(user)
-        # Flush so user.id is populated for the consumer FK
-        await db.flush()
-        if role_value == Role.CONSUMER.value:
-            org_name = getattr(request, "organization_name", None) or (
-                user.email.split("@")[0]
-                if user and user.email
-                else f"consumer-{user.id}"
-            )
-            consumer = Consumer(user_id=user.id, organization_name=org_name)
-            db.add(consumer)
+    # Create email confirmation record
+    email_code = await _create_email_confirmation(user, db)
+    from app.utils.email import send_transactional
+    await send_transactional(str(user.email), "email_confirmation", {"code": email_code})
 
-        await db.commit()
+    refresh_token = _make_refresh_token()
+    session = await _create_session(user, refresh_token, http_request, db)
+    access_token = _make_access_token(user, session.id)
+    await db.commit()
+    await db.refresh(user)
 
-        # Refresh the user (and consumer if created) to populate model fields
-        await db.refresh(user)
-        if role_value == Role.CONSUMER.value and consumer is not None:
-            with contextlib.suppress(Exception):
-                # If refresh fails, continue; creation likely succeeded
-                await db.refresh(consumer)
-    except Exception as e:
-        # Rollback and surface error
-        with contextlib.suppress(Exception):
-            await db.rollback()
-        logger.error(f"Failed to create user and consumer: {e}", exc_info=True)
-        raise ApplicationError("Failed to create user account")
-
-    return _create_tokens(user)
+    return _build_token_response(access_token, refresh_token)
 
 
-@AuthRouter.post(
-    "/login",
-    response_model=TokenResponse,
-    summary="Authenticate user",
-    description="Authenticate user with email and password, returns JWT access and refresh tokens. Rate limited to 10 requests per minute.",
-    responses={
-        200: {"description": "Authentication successful"},
-        401: {"description": "Invalid credentials"},
-        403: {"description": "User account is inactive"},
-        429: {"description": "Rate limit exceeded"},
-    },
-)
+@AuthRouter.post("/login", response_model=TokenResponse)
 async def login(
     request: LoginRequest,
     http_request: Request,
     db: AsyncSession = Depends(get_db),
-):
-    """
-    Authenticate user and return tokens.
+) -> TokenResponse:
+    """Authenticate with phone + password."""
+    user = await get_user_by_phone(request.phone, db)
+    if not user or not verify_password(request.password, user.password_hash):
+        raise ApplicationError("Incorrect phone or password.")
 
-    **Role Requirements:** None (public endpoint)
-
-    **Client Restrictions:**
-    - Mobile app: Only consumers and sales representatives can login
-    - Web app: Only supplier owners, managers, and sales representatives can login
-
-    Returns JWT tokens with role-based scopes for API access.
-    """
-    user = await get_user_by_email(request.email, db)
-    if not user:
-        raise ApplicationError("Incorrect email or password")
-    if not verify_password(request.password, user.password_hash):
-        raise ApplicationError("Incorrect email or password")
-
-    # Reactivate account if it was deactivated (user can reactivate by signing in)
     if not user.is_active:
-        user.is_active = True
-        await db.commit()
-        await db.refresh(user)
+        raise ApplicationError("Account is inactive.")
+    if user.is_frozen:
+        raise ApplicationError("Account is frozen. Contact support.")
 
-    is_mobile = is_mobile_client(http_request)
+    refresh_token = _make_refresh_token()
+    session = await _create_session(user, refresh_token, http_request, db)
+    access_token = _make_access_token(user, session.id)
+    await db.commit()
 
-    # Mobile app: Only consumers and sales representatives can login
-    if is_mobile:
-        if user.role not in [Role.CONSUMER.value, Role.SUPPLIER_SALES.value]:
-            raise ApplicationError("Only consumers and sales representatives can login through the mobile app")
-    else:
-        # Web app: Only supplier owners, managers, and sales representatives can login
-        if user.role not in [Role.SUPPLIER_OWNER.value, Role.SUPPLIER_MANAGER.value, Role.SUPPLIER_SALES.value]:
-            raise ApplicationError("Only supplier owners, managers, and sales representatives can login through the web app")
-
-    return _create_tokens(user)
+    return _build_token_response(access_token, refresh_token)
 
 
-@AuthRouter.post(
-    "/refresh",
-    response_model=TokenResponse,
-    summary="Refresh access token",
-    description="Obtain a new access token using a valid refresh token.",
-    responses={
-        200: {"description": "Token refreshed successfully"},
-        401: {"description": "Invalid or expired refresh token"},
-    },
-)
+@AuthRouter.post("/refresh", response_model=TokenResponse)
 async def refresh(
     request: RefreshRequest,
     http_request: Request,
     db: AsyncSession = Depends(get_db),
-):
-    """
-    Refresh access token using refresh token.
+) -> TokenResponse:
+    """Rotate refresh token and return new token pair."""
+    token_hash = _hash_token(request.refresh_token)
+    result = await db.execute(
+        select(Session).where(Session.refresh_token_hash == token_hash)
+    )
+    session = result.scalar_one_or_none()
 
-    **Role Requirements:** None (public endpoint, requires valid refresh token)
+    if session is None:
+        raise ApplicationError("Invalid refresh token.")
+    if session.expires_at <= datetime.now(UTC):
+        await db.delete(session)
+        await db.commit()
+        raise ApplicationError("Refresh token expired. Please log in again.")
 
-    **Client Restrictions:**
-    - Mobile app: Only consumers and sales representatives can refresh tokens
-    - Web app: Only supplier owners, managers, and sales representatives can refresh tokens
-    """
-    payload = decode_refresh_token(request.refresh_token)
-    if payload is None or (user_id := payload.get("sub")) is None:
-        raise ApplicationError("Invalid refresh token")
-    user = await get_user_by_id(user_id, db)
-    if not user or not user.is_active:
-        raise ApplicationError("User not found or inactive")
+    result = await db.execute(select(User).where(User.id == session.user_id))
+    user = result.scalar_one_or_none()
+    if user is None or not user.is_active or user.is_frozen:
+        raise ApplicationError("User not found or account unavailable.")
 
-    is_mobile = is_mobile_client(http_request)
+    new_refresh_token = _make_refresh_token()
+    session.refresh_token_hash = _hash_token(new_refresh_token)
+    session.last_used_at = datetime.now(UTC)
+    session.expires_at = datetime.now(UTC) + timedelta(minutes=settings.REFRESH_TOKEN_EXPIRE_MINUTES)
+    await db.flush()
 
-    # Mobile app: Only consumers and sales representatives can refresh tokens
-    if is_mobile:
-        if user.role not in [Role.CONSUMER.value, Role.SUPPLIER_SALES.value]:
-            raise ApplicationError("Only consumers and sales representatives can refresh tokens through the mobile app")
-    else:
-        # Web app: Only supplier owners, managers, and sales representatives can refresh tokens
-        if user.role not in [Role.SUPPLIER_OWNER.value, Role.SUPPLIER_MANAGER.value, Role.SUPPLIER_SALES.value]:
-            raise ApplicationError("Only supplier owners, managers, and sales representatives can refresh tokens through the web app")
-
-    return _create_tokens(user)
-
-
-@AuthRouter.post(
-    "/reset-password",
-    response_model=PasswordResetResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Reset password",
-    description="Reset user password by email. No email verification required - if email exists, password is reset immediately.",
-    responses={
-        200: {"description": "Password reset successfully"},
-        400: {"description": "Email not found or invalid password"},
-        422: {"description": "Validation error"},
-    },
-)
-async def reset_password(
-    request: PasswordResetRequest,
-    http_request: Request,
-    db: AsyncSession = Depends(get_db),
-) -> PasswordResetResponse:
-    """
-    Reset user password by email.
-
-    **Role Requirements:** None (public endpoint)
-
-    **Process:**
-    1. Verify email exists in database
-    2. Validate new password meets policy requirements
-    3. Update user's password hash
-    4. Return success message
-
-    **Note:** No email verification is required. If the email exists, the password is reset immediately.
-    """
-    # Check if user exists
-    user = await get_user_by_email(request.email, db)
-    if not user:
-        # Don't reveal if email exists or not for security
-        raise ApplicationError("Email not found")
-
-    # Validate password policy
-    try:
-        validate_password_policy(request.new_password)
-    except ValueError as e:
-        raise ApplicationError(str(e))
-
-    # Update password
-    user.password_hash = hash_password(request.new_password)
+    access_token = _make_access_token(user, session.id)
     await db.commit()
 
-    return PasswordResetResponse(message="Password reset successfully")
+    return _build_token_response(access_token, new_refresh_token)
+
+
+@AuthRouter.post("/logout", status_code=status.HTTP_200_OK)
+async def logout(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Delete the most recently used session for the current user."""
+    result = await db.execute(
+        select(Session)
+        .where(Session.user_id == current_user.id)
+        .order_by(Session.last_used_at.desc())
+    )
+    session = result.scalars().first()
+    if session:
+        await db.delete(session)
+        await db.commit()
+
+    return {"message": "Logged out"}

@@ -1,213 +1,109 @@
-"""Seed products table."""
+"""Seed products table with sample iCare catalog items."""
 
 import asyncio
-from datetime import UTC, datetime
 from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.product.model import Product
-from app.modules.supplier.model import Supplier
 
 
-async def seed_products(
-    session: AsyncSession, suppliers: dict[str, Supplier]
-) -> dict[str, Product]:
-    """
-    Seed products table.
+SAMPLE_PRODUCTS = [
+    {
+        "name": "Collagen Peptides 300g",
+        "sku": "IC-COL-300",
+        "description": "Hydrolyzed collagen peptides powder, unflavored. 30 servings.",
+        "price": Decimal("8900.00"),
+        "currency": "KZT",
+        "stock_qty": 200,
+        "unit": "jar",
+        "min_order_qty": 1,
+        "category": "supplements",
+    },
+    {
+        "name": "Omega-3 Fish Oil 1000mg (90 caps)",
+        "sku": "IC-OMG-090",
+        "description": "High-potency fish oil with EPA and DHA. 90 softgel capsules.",
+        "price": Decimal("5400.00"),
+        "currency": "KZT",
+        "stock_qty": 150,
+        "unit": "bottle",
+        "min_order_qty": 1,
+        "category": "supplements",
+    },
+    {
+        "name": "Vitamin D3 + K2 (60 caps)",
+        "sku": "IC-VDK-060",
+        "description": "Vitamin D3 2000 IU with K2 MK-7 for calcium absorption. 60 capsules.",
+        "price": Decimal("3900.00"),
+        "currency": "KZT",
+        "stock_qty": 300,
+        "unit": "bottle",
+        "min_order_qty": 1,
+        "category": "vitamins",
+    },
+    {
+        "name": "Magnesium Glycinate 400mg (120 caps)",
+        "sku": "IC-MAG-120",
+        "description": "Chelated magnesium glycinate for superior absorption. 120 capsules.",
+        "price": Decimal("6200.00"),
+        "currency": "KZT",
+        "stock_qty": 120,
+        "unit": "bottle",
+        "min_order_qty": 1,
+        "category": "minerals",
+    },
+    {
+        "name": "Probiotic Complex 30 Billion CFU (30 caps)",
+        "sku": "IC-PRB-030",
+        "description": "10-strain probiotic blend, 30 billion CFU per capsule.",
+        "price": Decimal("12500.00"),
+        "currency": "KZT",
+        "stock_qty": 80,
+        "unit": "bottle",
+        "min_order_qty": 1,
+        "category": "probiotics",
+    },
+    {
+        "name": "Starter Pack (3 items)",
+        "sku": "IC-STR-PKG",
+        "description": "Collagen + Omega-3 + Vitamin D3/K2 bundle. Best-seller combo.",
+        "price": Decimal("16500.00"),
+        "currency": "KZT",
+        "stock_qty": 50,
+        "unit": "pack",
+        "min_order_qty": 1,
+        "category": "bundles",
+    },
+]
 
-    Args:
-        session: Database session
-        suppliers: Dictionary of suppliers keyed by company name
 
-    Returns:
-        Dictionary mapping product name to Product object for use in other seed scripts.
-    """
-    # Get existing products
-    result = await session.execute(select(Product))
-    existing_products = {product.name: product for product in result.scalars().all()}
+async def seed_products(session: AsyncSession) -> list[Product]:
+    seeded: list[Product] = []
+    for data in SAMPLE_PRODUCTS:
+        result = await session.execute(select(Product).where(Product.sku == data["sku"]))
+        existing = result.scalar_one_or_none()
+        if existing:
+            print(f"  Product already exists: {data['sku']}")
+            seeded.append(existing)
+            continue
 
-    # Validate required suppliers exist
-    required_supplier_names = [
-        "Tech Supplies Co.",
-        "Global Merchandise Ltd.",
-        "Premium Products Inc.",
-    ]
-    for name in required_supplier_names:
-        if name not in suppliers:
-            raise ValueError(
-                f"Required supplier {name} not found. Please run seed_suppliers first."
-            )
-
-    products_data = [
-        # Products for Tech Supplies Co.
-        {
-            "supplier": suppliers["Tech Supplies Co."],
-            "name": "Laptop Computer",
-            "description": "High-performance laptop with 16GB RAM and 512GB SSD",
-            "price_kzt": Decimal("450000.00"),
-            "currency": "KZT",
-            "sku": "TSC-LAP-001",
-            "stock_qty": 50,
-            "is_active": True,
-        },
-        {
-            "supplier": suppliers["Tech Supplies Co."],
-            "name": "Wireless Mouse",
-            "description": "Ergonomic wireless mouse with long battery life",
-            "price_kzt": Decimal("15000.00"),
-            "currency": "KZT",
-            "sku": "TSC-MOU-001",
-            "stock_qty": 200,
-            "is_active": True,
-        },
-        {
-            "supplier": suppliers["Tech Supplies Co."],
-            "name": "Mechanical Keyboard",
-            "description": "RGB backlit mechanical keyboard with blue switches",
-            "price_kzt": Decimal("35000.00"),
-            "currency": "KZT",
-            "sku": "TSC-KEY-001",
-            "stock_qty": 100,
-            "is_active": True,
-        },
-        {
-            "supplier": suppliers["Tech Supplies Co."],
-            "name": "USB-C Hub",
-            "description": "Multi-port USB-C hub with HDMI, USB 3.0, and card reader",
-            "price_kzt": Decimal("25000.00"),
-            "currency": "KZT",
-            "sku": "TSC-HUB-001",
-            "stock_qty": 150,
-            "is_active": True,
-        },
-        # Products for Global Merchandise Ltd.
-        {
-            "supplier": suppliers["Global Merchandise Ltd."],
-            "name": "Office Chair",
-            "description": "Ergonomic office chair with lumbar support",
-            "price_kzt": Decimal("75000.00"),
-            "currency": "KZT",
-            "sku": "GML-CHA-001",
-            "stock_qty": 80,
-            "is_active": True,
-        },
-        {
-            "supplier": suppliers["Global Merchandise Ltd."],
-            "name": "Desk Lamp",
-            "description": "LED desk lamp with adjustable brightness",
-            "price_kzt": Decimal("12000.00"),
-            "currency": "KZT",
-            "sku": "GML-LAM-001",
-            "stock_qty": 300,
-            "is_active": True,
-        },
-        {
-            "supplier": suppliers["Global Merchandise Ltd."],
-            "name": "File Organizer",
-            "description": "Desktop file organizer with multiple compartments",
-            "price_kzt": Decimal("8000.00"),
-            "currency": "KZT",
-            "sku": "GML-FIL-001",
-            "stock_qty": 250,
-            "is_active": True,
-        },
-        # Products for Premium Products Inc.
-        {
-            "supplier": suppliers["Premium Products Inc."],
-            "name": "Standing Desk",
-            "description": "Electric height-adjustable standing desk",
-            "price_kzt": Decimal("250000.00"),
-            "currency": "KZT",
-            "sku": "PPI-DES-001",
-            "stock_qty": 30,
-            "is_active": True,
-        },
-        {
-            "supplier": suppliers["Premium Products Inc."],
-            "name": "Monitor Stand",
-            "description": "Dual monitor stand with cable management",
-            "price_kzt": Decimal("45000.00"),
-            "currency": "KZT",
-            "sku": "PPI-MON-001",
-            "stock_qty": 60,
-            "is_active": True,
-        },
-        {
-            "supplier": suppliers["Premium Products Inc."],
-            "name": "Noise-Cancelling Headphones",
-            "description": "Wireless noise-cancelling headphones with 30h battery",
-            "price_kzt": Decimal("95000.00"),
-            "currency": "KZT",
-            "sku": "PPI-HEA-001",
-            "stock_qty": 40,
-            "is_active": True,
-        },
-        # Inactive product for testing
-        {
-            "supplier": suppliers["Tech Supplies Co."],
-            "name": "Discontinued Product",
-            "description": "This product is no longer available",
-            "price_kzt": Decimal("10000.00"),
-            "currency": "KZT",
-            "sku": "TSC-DIS-001",
-            "stock_qty": 0,
-            "is_active": False,
-        },
-    ]
-
-    products = []
-    created_count = 0
-    for product_data in products_data:
-        product_name = product_data["name"]
-        if product_name in existing_products:
-            # Product already exists, use it
-            products.append(existing_products[product_name])
-        else:
-            # Create new product
-            supplier = product_data["supplier"]
-            assert isinstance(supplier, Supplier), (
-                f"Expected Supplier, got {type(supplier)}"
-            )
-            product = Product(
-                supplier_id=supplier.id,
-                name=product_name,
-                description=product_data["description"],
-                price_kzt=product_data["price_kzt"],
-                currency=product_data["currency"],
-                sku=product_data["sku"],
-                stock_qty=product_data["stock_qty"],
-                is_active=product_data["is_active"],
-                created_at=datetime.now(UTC),
-            )
-            session.add(product)
-            products.append(product)
-            created_count += 1
-
-    if created_count > 0:
+        product = Product(**data)
+        session.add(product)
         await session.flush()
-        await session.commit()
-        print(
-            f"✅ Created {created_count} new products (total: {len(products)} products available)"
-        )
-    else:
-        print(
-            f"✅ All required products already exist ({len(products)} products available)"
-        )
+        seeded.append(product)
+        print(f"  Created product: {data['sku']} — {data['name']}")
 
-    return {product.name: product for product in products}
+    await session.commit()
+    return seeded
 
 
 if __name__ == "__main__":
     from app.db.session import AsyncSessionLocal
-    from scripts.seed.seed_suppliers import seed_suppliers
-    from scripts.seed.seed_users import seed_users
 
     async def main():
         async with AsyncSessionLocal() as session:
-            users = await seed_users(session)
-            suppliers = await seed_suppliers(session, users)
-            await seed_products(session, suppliers)
+            await seed_products(session)
 
     asyncio.run(main())

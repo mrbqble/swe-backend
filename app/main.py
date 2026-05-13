@@ -50,46 +50,16 @@ app = FastAPI(
     docs_url=docs_url,
     redoc_url=redoc_url,
     openapi_tags=[
-        {
-            "name": "main",
-            "description": "Main application endpoints (health check, root)",
-        },
-        {
-            "name": "auth",
-            "description": "Authentication endpoints (signup, login, token refresh)",
-        },
-        {
-            "name": "products",
-            "description": "Product management endpoints. **Role requirements vary by endpoint.**",
-        },
-        {
-            "name": "orders",
-            "description": "Order management endpoints. **Role requirements vary by endpoint.**",
-        },
-        {
-            "name": "links",
-            "description": "Consumer-supplier link management endpoints",
-        },
-        {
-            "name": "chats",
-            "description": "Chat and messaging endpoints",
-        },
-        {
-            "name": "complaints",
-            "description": "Complaint management endpoints",
-        },
-        {
-            "name": "notifications",
-            "description": "Notification endpoints",
-        },
-        {
-            "name": "users",
-            "description": "User management endpoints",
-        },
-        {
-            "name": "catalog",
-            "description": "Public catalog endpoints",
-        },
+        {"name": "auth", "description": "Authentication endpoints (OTP, register, login, refresh, logout)"},
+        {"name": "users", "description": "User profile endpoints"},
+        {"name": "products", "description": "Product catalog — browse and search"},
+        {"name": "cart", "description": "Shopping cart with 15-minute reservation TTL"},
+        {"name": "orders", "description": "Order creation and history"},
+        {"name": "notifications", "description": "In-app notifications"},
+        {"name": "faq", "description": "Public FAQ"},
+        {"name": "payments", "description": "Payment initiation and Kaspi webhook"},
+        {"name": "support", "description": "Partner suggestions"},
+        {"name": "admin", "description": "Admin panel endpoints"},
     ],
 )
 
@@ -105,3 +75,8 @@ app.add_middleware(StructuredLoggingMiddleware)
 
 register_exception_handlers(app)
 register_routers(app)
+
+
+@app.get("/health", include_in_schema=False)
+async def health() -> dict:
+    return {"status": "ok"}

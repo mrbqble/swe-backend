@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(alembic revision *)",
+      "Bash(python3 -c \"import alembic; print\\('ok'\\)\")",
+      "Bash(python3 -m alembic --version)",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\mrbqble\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\\" -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })",
+      "PowerShell(python -m pip list 2>&1)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(docker compose *)",
+      "Bash(docker exec *)",
+      "Bash(curl -s http://localhost:8000/health)",
+      "Bash(curl -s http://localhost:8000/api/v1/products -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIzIiwicGhvbmUiOiIrNzAwMDAwMDAwMDEiLCJyb2xlIjoicGFydG5lciIsImV4cCI6MTc3ODY0MTY2MX0.UM3FuLMvG5x6pA16lmhU3KngRK862jblRAOdC5c4xz8')",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f'total={d[\\\\\"total\\\\\"]} items'\\); [print\\(f'  {p[\\\\\"sku\\\\\"]} {p[\\\\\"name\\\\\"]} qty={p[\\\\\"available_qty\\\\\"]}'\\) for p in d['items']]\")",
+      "Bash(curl -s -X POST http://localhost:8000/api/v1/cart -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIzIiwicGhvbmUiOiIrNzAwMDAwMDAwMDEiLCJyb2xlIjoicGFydG5lciIsImV4cCI6MTc3ODY0MTY2MX0.UM3FuLMvG5x6pA16lmhU3KngRK862jblRAOdC5c4xz8' -H 'Content-Type: application/json' -d '{\"product_id\":1,\"qty\":2}')",
+      "Bash(curl -s -X POST http://localhost:8000/api/v1/cart -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIzIiwicGhvbmUiOiIrNzAwMDAwMDAwMDEiLCJyb2xlIjoicGFydG5lciIsImV4cCI6MTc3ODY0MTY2MX0.UM3FuLMvG5x6pA16lmhU3KngRK862jblRAOdC5c4xz8' -H 'Content-Type: application/json' -d '{\"product_id\":3,\"qty\":1}')",
+      "Bash(curl -s -X POST http://localhost:8000/api/v1/orders -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIzIiwicGhvbmUiOiIrNzAwMDAwMDAwMDEiLCJyb2xlIjoicGFydG5lciIsImV4cCI6MTc3ODY0MTY2MX0.UM3FuLMvG5x6pA16lmhU3KngRK862jblRAOdC5c4xz8' -H 'Content-Type: application/json' -d '{\"notes\":\"First test order\"}')",
+      "Bash(curl -s http://localhost:8000/api/v1/cart -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIzIiwicGhvbmUiOiIrNzAwMDAwMDAwMDEiLCJyb2xlIjoicGFydG5lciIsImV4cCI6MTc3ODY0MTY2MX0.UM3FuLMvG5x6pA16lmhU3KngRK862jblRAOdC5c4xz8')",
+      "Bash(curl -s http://localhost:8000/api/v1/orders -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIzIiwicGhvbmUiOiIrNzAwMDAwMDAwMDEiLCJyb2xlIjoicGFydG5lciIsImV4cCI6MTc3ODY0MTY2MX0.UM3FuLMvG5x6pA16lmhU3KngRK862jblRAOdC5c4xz8')",
+      "Bash(curl -s http://localhost:8000/api/v1/products/1 -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIzIiwicGhvbmUiOiIrNzAwMDAwMDAwMDEiLCJyb2xlIjoicGFydG5lciIsImV4cCI6MTc3ODY0MTY2MX0.UM3FuLMvG5x6pA16lmhU3KngRK862jblRAOdC5c4xz8')"
+    ]
+  }
+}

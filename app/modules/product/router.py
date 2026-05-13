@@ -1,363 +1,98 @@
-"""Product management routes."""
+"""Product catalog routes."""
 
-from typing import Annotated, Any
+from datetime import UTC, datetime
+from typing import Any
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import get_current_user
 from app.core.exceptions import ApplicationError
-from app.core.roles import Role
 from app.db.session import get_db
+from app.modules.cart.model import CartItem
 from app.modules.product.model import Product
-from app.modules.product.schema import ProductCreate, ProductResponse, ProductUpdate
-from app.modules.supplier.model import SupplierStaff
+from app.modules.product.schema import ProductResponse
 from app.modules.user.model import User
-from app.utils.helpers import (
-    get_supplier_by_user_id,
-    get_supplier_id_for_user,
-    is_supplier_owner_or_manager,
-)
 from app.utils.pagination import create_pagination_response
 
 ProductRouter = APIRouter(prefix="/products", tags=["products"])
 
 
-# Use the helper function from utils instead of local function
-
-
-@ProductRouter.post(
-    "",
-    response_model=ProductResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="Create a new product",
-    description="Create a new product for the authenticated supplier. SKU must be unique per supplier.",
-    responses={
-        201: {"description": "Product created successfully"},
-        403: {"description": "Insufficient permissions"},
-        404: {"description": "Supplier profile not found"},
-        409: {"description": "Product with this SKU already exists"},
-    },
-)
-async def create_product(
-    product_data: ProductCreate,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: AsyncSession = Depends(get_db),
-) -> ProductResponse:
-    """
-    Create a product (supplier owner/manager only).
-
-    **Role Requirements:** supplier_owner, supplier_manager
-
-    **Required Scopes:** write:own_products
-    """
-    # Check user is supplier owner or manager
-    if current_user.role not in (
-        Role.SUPPLIER_OWNER.value,
-        Role.SUPPLIER_MANAGER.value,
-    ):
-        raise ApplicationError("Not enough permissions")
-
-    # Get supplier ID for user
-    supplier_id = await get_supplier_id_for_user(current_user, db)
-    if not supplier_id:
-        raise ApplicationError("Supplier profile not found")
-
-    # Check if SKU already exists for this supplier
+async def _available_qty(product_id: int, db: AsyncSession) -> int:
+    """Return stock_qty minus all active (non-expired) cart reservations."""
+    now = datetime.now(UTC)
     result = await db.execute(
-        select(Product).where(
-            Product.supplier_id == supplier_id,
-            Product.sku == product_data.sku,
+        select(func.coalesce(func.sum(CartItem.qty), 0)).where(
+            CartItem.product_id == product_id,
+            CartItem.reserved_until > now,
         )
     )
-    existing_product = result.scalar_one_or_none()
-    if existing_product:
-        raise ApplicationError("Product with this SKU already exists")
-
-    # Create product
-    product = Product(
-        supplier_id=supplier_id,
-        name=product_data.name,
-        description=product_data.description,
-        price_kzt=product_data.price_kzt,
-        currency=product_data.currency,
-        sku=product_data.sku,
-        stock_qty=product_data.stock_qty,
-        unit=product_data.unit,
-        min_order_qty=product_data.min_order_qty,
-        discount_percent=product_data.discount_percent,
-        delivery_available=product_data.delivery_available,
-        pickup_available=product_data.pickup_available,
-        lead_time_days=product_data.lead_time_days,
-        is_active=product_data.is_active,
-    )
-    db.add(product)
-    await db.commit()
-    await db.refresh(product)
-
-    return ProductResponse.model_validate(product)
+    reserved: int = result.scalar_one()
+    prod = await db.get(Product, product_id)
+    if prod is None:
+        return 0
+    return max(0, prod.stock_qty - reserved)
 
 
-@ProductRouter.put("/{product_id}", response_model=ProductResponse)
-async def update_product(
-    product_id: int,
-    product_data: ProductUpdate,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: AsyncSession = Depends(get_db),
-) -> ProductResponse:
-    """Update a product (supplier owner/manager only)."""
-    # Check user is supplier owner or manager
-    if current_user.role not in (
-        Role.SUPPLIER_OWNER.value,
-        Role.SUPPLIER_MANAGER.value,
-    ):
-        raise ApplicationError("Not enough permissions")
-
-    # Get product
-    result = await db.execute(select(Product).where(Product.id == product_id))
-    product = result.scalar_one_or_none()
-    if not product:
-        raise ApplicationError("Product not found")
-
-    # Check user has permission for this supplier
-    has_permission = await is_supplier_owner_or_manager(
-        current_user, product.supplier_id, db
-    )
-    if not has_permission:
-        raise ApplicationError("You do not have permission to manage this supplier's products")
-
-    # Check SKU uniqueness if SKU is being updated
-    if product_data.sku and product_data.sku != product.sku:
-        result = await db.execute(
-            select(Product).where(
-                Product.supplier_id == product.supplier_id,
-                Product.sku == product_data.sku,
-                Product.id != product_id,
-            )
-        )
-        existing_product = result.scalar_one_or_none()
-        if existing_product:
-            raise ApplicationError("Product with this SKU already exists")
-
-    # Update product fields
-    update_data = product_data.model_dump(exclude_unset=True)
-    for field, value in update_data.items():
-        setattr(product, field, value)
-
-    await db.commit()
-    await db.refresh(product)
-
-    return ProductResponse.model_validate(product)
+def _to_response(product: Product, avail: int) -> ProductResponse:
+    data = {c.key: getattr(product, c.key) for c in Product.__table__.columns}
+    data["available_qty"] = avail
+    return ProductResponse.model_validate(data)
 
 
-@ProductRouter.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_product(
-    product_id: int,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: AsyncSession = Depends(get_db),
-) -> None:
-    """Delete a product (supplier owner/manager only)."""
-    # Check user is supplier owner or manager
-    if current_user.role not in (
-        Role.SUPPLIER_OWNER.value,
-        Role.SUPPLIER_MANAGER.value,
-    ):
-        raise ApplicationError("Not enough permissions")
-
-    # Get product
-    result = await db.execute(select(Product).where(Product.id == product_id))
-    product = result.scalar_one_or_none()
-    if not product:
-        raise ApplicationError("Product not found")
-
-    # Check user has permission for this supplier
-    has_permission = await is_supplier_owner_or_manager(
-        current_user, product.supplier_id, db
-    )
-    if not has_permission:
-        raise ApplicationError("You do not have permission to manage this supplier's products")
-
-    # Delete product
-    await db.delete(product)
-    await db.commit()
-
-
-@ProductRouter.get(
-    "",
-    response_model=dict,  # PaginationResponse[ProductResponse]
-    summary="List products",
-    description="Get paginated list of products with optional filters. Public endpoint (no authentication required).",
-    responses={
-        200: {"description": "Products retrieved successfully"},
-    },
-)
-async def get_products(
-    supplier_id: int | None = Query(None, description="Filter by supplier ID"),
-    page: int = Query(1, ge=1, description="Page number (starts at 1)"),
-    size: int = Query(20, ge=1, le=100, description="Page size (max 100)"),
-    is_active: bool | None = Query(None, description="Filter by active status"),
+@ProductRouter.get("", response_model=dict)
+async def list_products(
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    q: str | None = Query(None, description="Search by name or SKU"),
+    category: str | None = Query(None),
+    min_price: float | None = Query(None, ge=0),
+    max_price: float | None = Query(None, ge=0),
+    _: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """
-    Get products with optional supplier filter.
+    """List active products with optional search and filters."""
+    base = select(Product).where(Product.is_active == True)  # noqa: E712
 
-    **Role Requirements:** None (public endpoint)
-
-    **Pagination:** Results are paginated with max page size of 100.
-    """
-    # Build query
-    query = select(Product)
-    if supplier_id:
-        query = query.where(Product.supplier_id == supplier_id)
-    if is_active is not None:
-        query = query.where(Product.is_active == is_active)
-
-    # Get total count
-    count_query = select(func.count(Product.id))
-    if supplier_id:
-        count_query = count_query.where(Product.supplier_id == supplier_id)
-    if is_active is not None:
-        count_query = count_query.where(Product.is_active == is_active)
-    count_result = await db.execute(count_query)
-    total = count_result.scalar_one() or 0
-
-    # Get paginated results
-    query = (
-        query.order_by(Product.created_at.desc()).offset((page - 1) * size).limit(size)
-    )
-    result = await db.execute(query)
-    products = result.scalars().all()
-
-    # Create response
-    product_responses = [
-        ProductResponse.model_validate(product) for product in products
-    ]
-    return create_pagination_response(product_responses, page, size, total).model_dump()
-
-
-@ProductRouter.get(
-    "/me",
-    response_model=dict,  # PaginationResponse[ProductResponse]
-    summary="Get my products",
-    description="Get paginated list of products for the authenticated supplier (owner/manager/sales rep).",
-    responses={
-        200: {"description": "Products retrieved successfully"},
-        403: {"description": "Insufficient permissions"},
-        404: {"description": "Supplier profile not found"},
-    },
-)
-async def get_my_products(
-    current_user: Annotated[User, Depends(get_current_user)],
-    page: int = Query(1, ge=1, description="Page number (starts at 1)"),
-    size: int = Query(20, ge=1, le=100, description="Page size (max 100)"),
-    is_active: bool | None = Query(None, description="Filter by active status"),
-    q: str | None = Query(None, description="Search query for product name, description, or SKU"),
-    db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
-    """
-    Get products for the authenticated supplier.
-
-    **Role Requirements:** supplier_owner, supplier_manager, supplier_sales
-
-    **Pagination:** Results are paginated with max page size of 100.
-
-    **Search:** Supports search by product name, description, or SKU via 'q' parameter.
-    """
-    # Check user is supplier staff (owner, manager, or sales rep)
-    if current_user.role not in (
-        Role.SUPPLIER_OWNER.value,
-        Role.SUPPLIER_MANAGER.value,
-        Role.SUPPLIER_SALES.value,
-    ):
-        raise ApplicationError("Not enough permissions")
-
-    # Get supplier ID for user (works for owner, manager, and sales rep)
-    supplier_id = await get_supplier_id_for_user(current_user, db)
-    if not supplier_id:
-        raise ApplicationError("Supplier profile not found")
-
-    # Build query for this supplier's products
-    query = select(Product).where(Product.supplier_id == supplier_id)
-    if is_active is not None:
-        query = query.where(Product.is_active == is_active)
-
-    # Add search filter if query provided
     if q:
-        search_term = f"%{q}%"
-        query = query.where(
-            (Product.name.ilike(search_term))
-            | (Product.description.ilike(search_term))
-            | (Product.sku.ilike(search_term))
+        like = f"%{q}%"
+        base = base.where((Product.name.ilike(like)) | (Product.sku.ilike(like)))
+    if category:
+        base = base.where(Product.category == category)
+    if min_price is not None:
+        base = base.where(Product.price >= min_price)
+    if max_price is not None:
+        base = base.where(Product.price <= max_price)
+
+    total_q = select(func.count()).select_from(base.subquery())
+    total = (await db.execute(total_q)).scalar_one()
+
+    rows = (await db.execute(base.order_by(Product.name).offset((page - 1) * size).limit(size))).scalars().all()
+
+    now = datetime.now(UTC)
+    reserved_map: dict[int, int] = {}
+    if rows:
+        res = await db.execute(
+            select(CartItem.product_id, func.coalesce(func.sum(CartItem.qty), 0))
+            .where(CartItem.product_id.in_([p.id for p in rows]), CartItem.reserved_until > now)
+            .group_by(CartItem.product_id)
         )
+        reserved_map = {pid: qty for pid, qty in res.all()}
 
-    # Get total count
-    count_query = select(func.count(Product.id)).where(
-        Product.supplier_id == supplier_id
-    )
-    if is_active is not None:
-        count_query = count_query.where(Product.is_active == is_active)
-    if q:
-        search_term = f"%{q}%"
-        count_query = count_query.where(
-            (Product.name.ilike(search_term))
-            | (Product.description.ilike(search_term))
-            | (Product.sku.ilike(search_term))
-        )
-    count_result = await db.execute(count_query)
-    total = count_result.scalar_one() or 0
-
-    # Get paginated results
-    query = (
-        query.order_by(Product.created_at.desc()).offset((page - 1) * size).limit(size)
-    )
-    result = await db.execute(query)
-    products = result.scalars().all()
-
-    # Create response
-    product_responses = [
-        ProductResponse.model_validate(product) for product in products
-    ]
-    return create_pagination_response(product_responses, page, size, total).model_dump()
+    items = [_to_response(p, max(0, p.stock_qty - reserved_map.get(p.id, 0))) for p in rows]
+    return create_pagination_response(items, page, size, total).model_dump()
 
 
-@ProductRouter.get(
-    "/{product_id}",
-    response_model=dict,
-    summary="Get product by ID",
-    description="Get a single product by its ID. Public endpoint (no authentication required).",
-    responses={
-        200: {"description": "Product retrieved successfully"},
-        404: {"description": "Product not found"},
-    },
-)
+@ProductRouter.get("/{product_id}", response_model=ProductResponse)
 async def get_product(
     product_id: int,
+    _: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
-    """
-    Get a single product by ID.
-
-    **Role Requirements:** None (public endpoint)
-    """
-    # Get product with supplier relationship loaded
-    result = await db.execute(
-        select(Product)
-        .options(selectinload(Product.supplier))
-        .where(Product.id == product_id)
-    )
-    product = result.scalar_one_or_none()
-    if not product:
-        raise ApplicationError("Product not found")
-
-    # Convert to response and include supplier info if available
-    product_dict = ProductResponse.model_validate(product).model_dump()
-    if product.supplier:
-        product_dict["supplier"] = {
-            "id": product.supplier.id,
-            "company_name": product.supplier.company_name,
-            "name": product.supplier.company_name,
-        }
-
-    return product_dict
+) -> ProductResponse:
+    """Get a single product by ID."""
+    product = await db.get(Product, product_id)
+    if product is None or not product.is_active:
+        raise ApplicationError("Product not found.", status_code=404)
+    avail = await _available_qty(product_id, db)
+    return _to_response(product, avail)

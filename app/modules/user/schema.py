@@ -1,65 +1,82 @@
-"""User response schemas."""
+"""User schemas."""
 
-from datetime import datetime
+from datetime import date, datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
-class UserResponse(BaseModel):
-    """User response schema."""
-
-    model_config = ConfigDict(
-        from_attributes=True,
-        strict=False,  # Allow type coercion for nested validation
-        json_schema_extra={
-            "example": {
-                "id": 1,
-                "email": "user@example.com",
-                "first_name": "John",
-                "last_name": "Doe",
-                "role": "consumer",
-                "is_active": True,
-                "created_at": "2024-01-15T10:30:00Z",
-                "organization_name": "Acme Corp",
-            }
-        },
-    )
+class UserProfile(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
 
     id: int
-    email: EmailStr
+    phone: str
     first_name: str
-    last_name: str
-    role: str
+    last_name: str | None
+    patronymic: str | None
+    dob: date
+    email: str | None
+    email_confirmed: bool
+    city: str | None
+    avatar_url: str | None
+    ref_code: str
+    ref_code_changed: bool
+    status_tier: str
     is_active: bool
+    is_frozen: bool
+    team_volume: float
     created_at: datetime
-    organization_name: str | None = Field(
-        None, description="Organization name (for consumers only)"
-    )
-    profile_image: str | None = Field(
-        None, description="Base64 encoded profile image (for consumers only)"
-    )
-    company_name: str | None = Field(
-        None, description="Company name (for supplier staff only)"
-    )
-    company_logo: str | None = Field(
-        None, description="Base64 encoded company logo (for supplier staff only)"
-    )
+    updated_at: datetime
 
 
-class UserUpdate(BaseModel):
-    """User update schema."""
+class UpdateProfileRequest(BaseModel):
+    model_config = ConfigDict(strict=True)
 
-    model_config = ConfigDict(from_attributes=True, strict=False)
-
-    email: EmailStr | None = None
     first_name: str | None = Field(None, min_length=1, max_length=100)
-    last_name: str | None = Field(None, min_length=1, max_length=100)
-    organization_name: str | None = Field(None, min_length=1, max_length=255, description="Organization name (for consumers only)")
-    profile_image: str | None = Field(None, description="Base64 encoded profile image (for consumers only)")
+    last_name: str | None = Field(None, max_length=100)
+    patronymic: str | None = Field(None, max_length=100)
+    email: EmailStr | None = None
+    city: str | None = Field(None, max_length=100)
+    avatar_url: str | None = Field(None, max_length=500)
 
 
-class PasswordChange(BaseModel):
-    """Password change schema."""
+class ChangePasswordRequest(BaseModel):
+    model_config = ConfigDict(strict=True)
 
-    current_password: str = Field(..., min_length=1)
+    current_password: str
     new_password: str = Field(..., min_length=8)
+
+
+class SessionInfo(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    device_info: dict[str, Any] | None
+    ip: str | None
+    created_at: datetime
+    last_used_at: datetime
+    is_current: bool
+
+
+class ChangeRefCodeRequest(BaseModel):
+    model_config = ConfigDict(strict=True)
+
+    new_code: str = Field(..., min_length=4, max_length=10)
+
+
+class DeleteConfirmRequest(BaseModel):
+    model_config = ConfigDict(strict=True)
+
+    code: str = Field(..., min_length=6, max_length=6)
+
+
+class EmailConfirmRequest(BaseModel):
+    model_config = ConfigDict(strict=True)
+
+    code: str = Field(..., min_length=6, max_length=6)
+
+
+class PushTokenRequest(BaseModel):
+    model_config = ConfigDict(strict=True)
+
+    token: str = Field(..., min_length=1, max_length=255)

@@ -4,6 +4,7 @@ from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ApplicationError
@@ -14,102 +15,103 @@ from app.modules.user.model import User
 from app.utils.helpers import get_user_by_id
 
 
-def is_mobile_client(request: Request) -> bool:
-    """
-    Detect if the request is from a mobile app or web app.
-
-    Checks for:
-    1. X-Client-Type header (mobile/web) - explicit client type
-    2. User-Agent header - detects mobile user agents
-
-    Returns True if mobile, False if web.
-    """
-    # Check explicit client type header (preferred method)
-    client_type = request.headers.get("X-Client-Type", "").lower()
-    if client_type == "mobile":
-        return True
-    if client_type == "web":
-        return False
-
-    # Fallback to User-Agent detection
-    user_agent = request.headers.get("user-agent", "").lower()
-
-    # Common mobile app user agents
-    mobile_indicators = [
-        "mobile",
-        "android",
-        "iphone",
-        "ipad",
-        "ipod",
-        "react-native",
-        "flutter",
-    ]
-
-    # If User-Agent contains mobile indicators, assume mobile
-    if any(indicator in user_agent for indicator in mobile_indicators):
-        return True
-
-    # Default to web if no mobile indicators found
-    return False
-
-
 class HTTPBearer401(HTTPBearer):
     """HTTPBearer that returns 401 instead of 403 for missing credentials."""
 
     async def __call__(self, request: Request) -> HTTPAuthorizationCredentials:
-        """Override to return 401 for missing credentials instead of 403."""
         try:
             credentials = await super().__call__(request)
             if credentials is None:
-                raise ApplicationError("Could not validate credentials")
+                raise ApplicationError("Could not validate credentials", status_code=401)
             return credentials
         except HTTPException as e:
-            # Convert 403 (Forbidden) to 401 (Unauthorized) for missing/invalid credentials
             if e.status_code == status.HTTP_403_FORBIDDEN:
-                raise ApplicationError("Could not validate credentials")
+                raise ApplicationError("Could not validate credentials", status_code=401)
             raise
 
 
-_http_bearer = HTTPBearer401()
+http_bearer = HTTPBearer401()
+_http_bearer = http_bearer  # backward-compat alias
 
 
 async def get_current_user(
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(_http_bearer)],
-    request: Request,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(http_bearer)],
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    """
-    Get current authenticated user from JWT token.
-
-    **Client Restrictions:**
-    - Mobile app: Only consumers and sales representatives can access
-    - Web app: Only supplier owners, managers, and sales representatives can access
-    """
+    """Get current authenticated partner from JWT token."""
     payload = decode_access_token(credentials.credentials)
-    if payload is None or (user_id := payload.get("sub")) is None:
-        raise ApplicationError(
-            "Could not validate credentials"
-            if payload is None
-            else "Invalid token payload"
-        )
+    if payload is None:
+        raise ApplicationError("Could not validate credentials", status_code=401)
+
+    # Reject admin tokens on partner endpoints
+    if payload.get("role") == "admin":
+        raise ApplicationError("Could not validate credentials", status_code=401)
+
+    user_id_raw = payload.get("sub")
+    if user_id_raw is None:
+        raise ApplicationError("Invalid token payload", status_code=401)
+
+    try:
+        user_id = int(user_id_raw)
+    except (ValueError, TypeError):
+        raise ApplicationError("Invalid token payload", status_code=401)
+
     user = await get_user_by_id(user_id, db)
     if user is None:
-        raise ApplicationError("User not found")
+        raise ApplicationError("User not found", status_code=401)
     if not user.is_active:
-        raise ApplicationError("User account is inactive")
-
-    is_mobile = is_mobile_client(request)
-
-    # Mobile app: Only consumers and sales representatives can access
-    if is_mobile:
-        if user.role not in [Role.CONSUMER.value, Role.SUPPLIER_SALES.value]:
-            raise ApplicationError("Only consumers and sales representatives can access the mobile app")
-    else:
-        # Web app: Only supplier owners, managers, and sales representatives can access
-        if user.role not in [Role.SUPPLIER_OWNER.value, Role.SUPPLIER_MANAGER.value, Role.SUPPLIER_SALES.value]:
-            raise ApplicationError("Only supplier owners, managers, and sales representatives can access the web app")
+        raise ApplicationError("User account is inactive", status_code=403)
+    if user.is_frozen:
+        raise ApplicationError("Account is frozen", status_code=403)
 
     return user
+
+
+async def get_session_id(
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(http_bearer)],
+) -> int | None:
+    """Extract session_id (sid) claim from the access token."""
+    payload = decode_access_token(credentials.credentials)
+    if payload:
+        sid = payload.get("sid")
+        try:
+            return int(sid) if sid is not None else None
+        except (ValueError, TypeError):
+            return None
+    return None
+
+
+async def get_current_admin(
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(http_bearer)],
+    db: AsyncSession = Depends(get_db),
+):
+    """Get current authenticated admin from JWT token."""
+    from app.modules.admin.model import AdminUser
+
+    payload = decode_access_token(credentials.credentials)
+    if payload is None:
+        raise ApplicationError("Could not validate credentials", status_code=401)
+
+    if payload.get("role") != "admin":
+        raise ApplicationError("Admin access required", status_code=403)
+
+    admin_id_raw = payload.get("sub")
+    if admin_id_raw is None:
+        raise ApplicationError("Invalid token payload", status_code=401)
+
+    try:
+        admin_id = int(admin_id_raw)
+    except (ValueError, TypeError):
+        raise ApplicationError("Invalid token payload", status_code=401)
+
+    result = await db.execute(select(AdminUser).where(AdminUser.id == admin_id))
+    admin = result.scalar_one_or_none()
+    if admin is None:
+        raise ApplicationError("Admin not found", status_code=401)
+    if not admin.is_active:
+        raise ApplicationError("Admin account is inactive", status_code=403)
+
+    return admin
 
 
 def require_roles(*roles: Role):
@@ -118,13 +120,8 @@ def require_roles(*roles: Role):
     async def role_checker(
         current_user: User = Depends(get_current_user),
     ) -> User:
-        """Check if current user has required role."""
-        try:
-            user_role = Role(current_user.role)
-        except ValueError:
-            user_role = None
-        if user_role is None or user_role not in roles:
-            raise ApplicationError("Not enough permissions")
+        if current_user.status_tier not in [r.value for r in roles]:
+            raise ApplicationError("Not enough permissions", status_code=403)
         return current_user
 
     return role_checker

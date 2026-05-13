@@ -16,9 +16,9 @@ class Settings(BaseSettings):
 
     LOG_LEVEL: str = "INFO"
     API_V1_PREFIX: str = "/api/v1"
-    PROJECT_NAME: str = "FastAPI Backend Server"
+    PROJECT_NAME: str = "iCare API"
     VERSION: str = "1.0.0"
-    DESCRIPTION: str = "A minimal, production-ready FastAPI server"
+    DESCRIPTION: str = "iCare partner network backend"
     ENV: str = "dev"
     DATABASE_URL: str = "postgresql+asyncpg://postgres:2148@localhost:5432/postgres"
     SECRET_KEY: str = "change-me-in-production"
@@ -43,6 +43,22 @@ class Settings(BaseSettings):
     MAX_REQUEST_SIZE: int = 10 * 1024 * 1024  # 10MB max request body size
     MAX_STRING_LENGTH: int = 10000  # Max length for string fields
     ENABLE_DOCS_IN_PROD: bool = False  # Disable OpenAPI docs in production by default
+
+    # OTP settings
+    OTP_EXPIRE_MINUTES: int = 10
+    OTP_MAX_ATTEMPTS: int = 3
+    OTP_BLOCK_MINUTES: int = 15
+    OTP_RESEND_LIMIT: int = 3
+    OTP_RESEND_WINDOW_MINUTES: int = 15
+
+    # Cart
+    CART_RESERVATION_MINUTES: int = 15
+
+    # Twilio (OTP delivery — leave empty in dev)
+    TWILIO_ACCOUNT_SID: str = ""
+    TWILIO_AUTH_TOKEN: str = ""
+    TWILIO_WHATSAPP_FROM: str = ""
+    TWILIO_SMS_FROM: str = ""
 
 
 settings = Settings()
