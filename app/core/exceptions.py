@@ -20,13 +20,14 @@ class ApplicationError(Exception):
     """Custom application error that can be raised anywhere and handled globally.
 
     Usage:
-        raise ApplicationError("Consumer profile not found")
-        raise ApplicationError("Supplier not found", code="SUPPLIER_NOT_FOUND")
+        raise ApplicationError("Not found")
+        raise ApplicationError("Too many requests", status_code=429)
     """
 
-    def __init__(self, message: str, code: str | None = None):
+    def __init__(self, message: str, code: str | None = None, status_code: int = 400):
         self.message = message
         self.code = code or "APPLICATION_ERROR"
+        self.status_code = status_code
         super().__init__(self.message)
 
 
@@ -280,7 +281,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             },
         )
         return JSONResponse(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=exc.status_code,
             content=ErrorResponse(
                 detail=exc.message,
                 code=exc.code,

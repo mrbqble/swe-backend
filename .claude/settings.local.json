@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(alembic revision *)",
+      "Bash(python3 -c \"import alembic; print\\('ok'\\)\")",
+      "Bash(python3 -m alembic --version)",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\mrbqble\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\\" -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })",
+      "PowerShell(python -m pip list 2>&1)",
+      "Bash(git add *)"
+    ]
+  }
+}

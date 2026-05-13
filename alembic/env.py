@@ -9,77 +9,55 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
 
-# Add parent directory to path to import app module
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.core.config import settings
 from app.db.base import Base
-from app.modules.chat.model import *  # noqa: F403
-from app.modules.complaint.model import *  # noqa: F403
-from app.modules.consumer.model import *  # noqa: F403
-from app.modules.link.model import *  # noqa: F403
-from app.modules.notification.model import *  # noqa: F403
-from app.modules.order.model import *  # noqa: F403
-from app.modules.product.model import *  # noqa: F403
-from app.modules.supplier.model import *  # noqa: F403
-
-# Import all models so Alembic can discover them
+from app.modules.auth.model import *  # noqa: F403
 from app.modules.user.model import *  # noqa: F403
 
-# Alembic Config object
 config = context.config
 
-# Configure logging from alembic.ini
 if config.config_file_name:
     fileConfig(config.config_file_name)
 
-# Metadata for autogenerate support
 target_metadata = Base.metadata
 
-# Set database URL from settings
 database_url = settings.DATABASE_URL
 config.set_main_option("sqlalchemy.url", database_url)
 
-# For offline mode, convert async URL to sync URL
 sync_database_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
 
 
 def run_migrations_offline() -> None:
-    """Run migrations in 'offline' mode (SQL script generation)."""
     context.configure(
         url=sync_database_url,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
     )
-
     with context.begin_transaction():
         context.run_migrations()
 
 
 def do_run_migrations(connection: Connection) -> None:
     context.configure(connection=connection, target_metadata=target_metadata)
-
     with context.begin_transaction():
         context.run_migrations()
 
 
 async def run_async_migrations() -> None:
-    """Run migrations in 'online' mode with async engine."""
     connectable = async_engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
-
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)
-
     await connectable.dispose()
 
 
 def run_migrations_online() -> None:
-    """Run migrations in 'online' mode."""
     asyncio.run(run_async_migrations())
 
 

@@ -51,44 +51,12 @@ app = FastAPI(
     redoc_url=redoc_url,
     openapi_tags=[
         {
-            "name": "main",
-            "description": "Main application endpoints (health check, root)",
-        },
-        {
             "name": "auth",
-            "description": "Authentication endpoints (signup, login, token refresh)",
-        },
-        {
-            "name": "products",
-            "description": "Product management endpoints. **Role requirements vary by endpoint.**",
-        },
-        {
-            "name": "orders",
-            "description": "Order management endpoints. **Role requirements vary by endpoint.**",
-        },
-        {
-            "name": "links",
-            "description": "Consumer-supplier link management endpoints",
-        },
-        {
-            "name": "chats",
-            "description": "Chat and messaging endpoints",
-        },
-        {
-            "name": "complaints",
-            "description": "Complaint management endpoints",
-        },
-        {
-            "name": "notifications",
-            "description": "Notification endpoints",
+            "description": "Authentication endpoints (OTP, register, login, refresh, logout)",
         },
         {
             "name": "users",
-            "description": "User management endpoints",
-        },
-        {
-            "name": "catalog",
-            "description": "Public catalog endpoints",
+            "description": "User profile endpoints",
         },
     ],
 )
