@@ -19,8 +19,11 @@ class OtpCode(Base):
     phone: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
     code_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     channel: Mapped[str] = mapped_column(String(20), nullable=False)  # whatsapp|sms|telegram|mock
+    purpose: Mapped[str | None] = mapped_column(String(20), nullable=True)  # registration|forgot_password|deletion
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    resend_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_used: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
@@ -37,8 +40,24 @@ class EmailConfirmation(Base):
     code_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    email_change_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_used: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
+    )
+
+
+class RefCodeHistory(Base):
+    __tablename__ = "ref_code_history"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    old_ref_code: Mapped[str] = mapped_column(String(20), nullable=False)
+    new_ref_code: Mapped[str] = mapped_column(String(20), nullable=False)
+    changed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
 

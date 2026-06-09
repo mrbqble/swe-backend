@@ -13,11 +13,27 @@ _TEMPLATES: dict[str, tuple[str, str]] = {
     ),
     "password_changed": (
         "iCare: password changed",
-        "Your password was changed on {date} from IP {ip}. If this wasn't you, contact support.",
+        "Your password was changed on {date}. Device: {device}. City: {city}. If this wasn't you, contact support.",
     ),
     "email_changed": (
         "iCare: email address changed",
         "Your account email was changed to {new_email}. If this wasn't you, contact support.",
+    ),
+    "ref_code_changed": (
+        "iCare: your referral code was changed",
+        "Your referral code has been updated to {new_ref_code}. Old code: {old_ref_code}.",
+    ),
+    "account_deletion_scheduled": (
+        "iCare: your account will be deleted in 7 days",
+        "Your account is scheduled for deletion. To cancel, follow this link within 7 days: {cancel_url}",
+    ),
+    "account_deletion_warning": (
+        "iCare: your account will be deleted tomorrow",
+        "Your iCare account will be permanently deleted in 24 hours. To cancel: {cancel_url}",
+    ),
+    "account_deletion_cancelled": (
+        "iCare: account deletion cancelled",
+        "Your account deletion request has been cancelled. Your account is active again.",
     ),
     "order_placed": (
         "iCare: order #{order_id} placed",

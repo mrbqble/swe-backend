@@ -35,7 +35,7 @@ async def seed_users(session: AsyncSession) -> dict[str, User]:
         email="root@icare.dev",
         ref_code="ICR000000",
         is_root=True,
-        status_tier="admin",
+        status_tier="partner",
         is_active=True,
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),

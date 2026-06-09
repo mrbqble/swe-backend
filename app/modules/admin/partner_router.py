@@ -295,6 +295,59 @@ async def reset_partner_password(
         return {"message": "Password reset"}
 
 
+# ── Block / unblock ───────────────────────────────────────────────────────────
+
+@AdminPartnerRouter.post("/partners/{user_id}/block")
+async def block_partner(
+    user_id: int,
+    request: Request,
+    admin: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Block a partner account. Terminates all active sessions immediately."""
+    user = await db.get(User, user_id)
+    if user is None:
+        raise ApplicationError("Partner not found.", status_code=404)
+    if not user.is_active:
+        raise ApplicationError("Partner is already blocked.")
+
+    before = _user_snapshot(user)
+    user.is_active = False
+    await db.execute(delete(Session).where(Session.user_id == user_id))
+    after = _user_snapshot(user)
+
+    await _log_action(admin, "block_partner", "user", user_id, before, after, request, db)
+    await db.commit()
+
+    # TODO: send push notification to partner informing of block
+    return {"message": "Partner blocked."}
+
+
+@AdminPartnerRouter.post("/partners/{user_id}/unblock")
+async def unblock_partner(
+    user_id: int,
+    request: Request,
+    admin: AdminUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Unblock a partner account. Per spec: triggers push notification to partner."""
+    user = await db.get(User, user_id)
+    if user is None:
+        raise ApplicationError("Partner not found.", status_code=404)
+    if user.is_active:
+        raise ApplicationError("Partner is not blocked.")
+
+    before = _user_snapshot(user)
+    user.is_active = True
+    after = _user_snapshot(user)
+
+    await _log_action(admin, "unblock_partner", "user", user_id, before, after, request, db)
+    await db.commit()
+
+    # TODO: send push notification to partner informing of unblock
+    return {"message": "Partner unblocked."}
+
+
 # ── IP/TOO verification queue ─────────────────────────────────────────────────
 
 @AdminPartnerRouter.get("/ip-too/pending")

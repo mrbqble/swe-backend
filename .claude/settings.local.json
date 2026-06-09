@@ -18,7 +18,15 @@
       "Bash(curl -s -X POST http://localhost:8000/api/v1/orders -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIzIiwicGhvbmUiOiIrNzAwMDAwMDAwMDEiLCJyb2xlIjoicGFydG5lciIsImV4cCI6MTc3ODY0MTY2MX0.UM3FuLMvG5x6pA16lmhU3KngRK862jblRAOdC5c4xz8' -H 'Content-Type: application/json' -d '{\"notes\":\"First test order\"}')",
       "Bash(curl -s http://localhost:8000/api/v1/cart -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIzIiwicGhvbmUiOiIrNzAwMDAwMDAwMDEiLCJyb2xlIjoicGFydG5lciIsImV4cCI6MTc3ODY0MTY2MX0.UM3FuLMvG5x6pA16lmhU3KngRK862jblRAOdC5c4xz8')",
       "Bash(curl -s http://localhost:8000/api/v1/orders -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIzIiwicGhvbmUiOiIrNzAwMDAwMDAwMDEiLCJyb2xlIjoicGFydG5lciIsImV4cCI6MTc3ODY0MTY2MX0.UM3FuLMvG5x6pA16lmhU3KngRK862jblRAOdC5c4xz8')",
-      "Bash(curl -s http://localhost:8000/api/v1/products/1 -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIzIiwicGhvbmUiOiIrNzAwMDAwMDAwMDEiLCJyb2xlIjoicGFydG5lciIsImV4cCI6MTc3ODY0MTY2MX0.UM3FuLMvG5x6pA16lmhU3KngRK862jblRAOdC5c4xz8')"
+      "Bash(curl -s http://localhost:8000/api/v1/products/1 -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIzIiwicGhvbmUiOiIrNzAwMDAwMDAwMDEiLCJyb2xlIjoicGFydG5lciIsImV4cCI6MTc3ODY0MTY2MX0.UM3FuLMvG5x6pA16lmhU3KngRK862jblRAOdC5c4xz8')",
+      "Bash(python -c ' *)",
+      "Bash(ipconfig)",
+      "Bash(findstr /i \"IPv4\")",
+      "PowerShell(Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -notmatch 'Loopback' } | Select-Object InterfaceAlias, IPAddress | Format-Table -AutoSize)",
+      "PowerShell(docker info --format \"{{.ServerVersion}}\" 2>&1)",
+      "Bash(REACT_NATIVE_PACKAGER_HOSTNAME=192.168.1.51 npx expo start --non-interactive)",
+      "Bash(cat /tmp/expo_not_here)",
+      "Bash(CI=1 REACT_NATIVE_PACKAGER_HOSTNAME=192.168.1.51 npx expo start)"
     ]
   }
 }

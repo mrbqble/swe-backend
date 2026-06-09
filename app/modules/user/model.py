@@ -41,6 +41,12 @@ class User(Base):
     payout_method: Mapped[str | None] = mapped_column(String(100), nullable=True)
     ref_code_changed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     push_token: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    welcomed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    deletion_scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deletion_cancel_token: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    language: Mapped[str] = mapped_column(String(5), default="ru", nullable=False)
+    consent_version: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    consent_recorded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
